@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="theme-color" content="#0a0a0f">
+    <meta name="description" content="DevDNA - Discover your developer archetype. Cyberpunk-themed quiz decoding your coding soul.">
+    <title>DevDNA • Discover Your Developer Archetype</title>
+
+    <!-- Futuristic Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧬</text></svg>">
+
+    <!-- Firebase ImportMap (works on Render & local server) -->
+    <script type="importmap">
+    {
+        "imports": {
+            "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+        }
+    }
+    </script>
+</head>
+<body>
+    <!-- Animated Background Layers -->
+    <div class="bg-gradient"></div>
+    <canvas id="bg-canvas" aria-hidden="true"></canvas>
+    <div class="noise-overlay" aria-hidden="true"></div>
+    <div class="grid-overlay" aria-hidden="true"></div>
+
+    <!-- Header / Brand Strip -->
+    <header class="top-bar">
+        <div class="brand">
+            <span class="brand-icon">🧬</span>
+            <span class="brand-text">DevDNA</span>
+            <span class="brand-version">v1.0 / SYS.ARCHETYPE</span>
+        </div>
+        <div class="top-bar-line"></div>
+        <div class="system-status">
+            <span class="pulse-dot"></span>
+            SYSTEM ONLINE
+        </div>
+    </header>
+
+    <main class="app-container">
+        <!-- LANDING SECTION -->
+        <section id="landing-section" class="section active">
+            <div class="landing-content">
+                <div class="badge-wrapper">
+                    <span class="neon-badge"><span class="badge-dot"></span> NEURAL SCAN READY // 12 QUESTIONS</span>
+                </div>
+
+                <h1 class="hero-title">
+                    <span class="title-glitch" data-text="DevDNA">DevDNA</span>
+                </h1>
+                
+                <p class="hero-subtitle">Discover Your Developer Archetype</p>
+                <p class="hero-desc">We decode your coding instincts, design cravings, and debug rituals to reveal the archetype hardwired into your source code.</p>
+
+                <button id="start-btn" class="btn btn-primary btn-glow">
+                    <span class="btn-inner">
+                        <span class="btn-text">Start Analysis</span>
+                        <span class="btn-icon">▶</span>
+                    </span>
+                </button>
+
+                <div class="archetype-preview">
+                    <div class="preview-label">DETECTED ARCHETYPES IN DATABASE:</div>
+                    <div class="preview-chips">
+                        <span class="chip chip-blue">🎨 Wizard</span>
+                        <span class="chip chip-green">🛠 Architect</span>
+                        <span class="chip chip-purple">⚡ Ninja</span>
+                        <span class="chip chip-orange">🐞 Detective</span>
+                        <span class="chip chip-cyan">🤖 AI Explorer</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="landing-decoration">
+                <div class="deco-line"></div>
+                <div class="deco-code">
+                    // initializing dna sequence...<br>
+                    const dev = await decode(you);<br>
+                    console.log(dev.archetype);<br>
+                    <span class="deco-blink">▌</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- QUIZ SECTION -->
+        <section id="quiz-section" class="section">
+            <div class="quiz-container glass-panel">
+                <!-- Progress Header -->
+                <div class="progress-header">
+                    <div class="progress-top">
+                        <span id="question-counter" class="mono">QUESTION 01 / 12</span>
+                        <span id="progress-percent" class="mono percent">8%</span>
+                    </div>
+                    <div class="progress-bar-track">
+                        <div id="progress-fill" class="progress-bar-fill"></div>
+                        <div class="progress-bar-glow"></div>
+                    </div>
+                </div>
+
+                <!-- Question Wrapper (for transitions) -->
+                <div id="question-wrapper" class="question-wrapper">
+                    <h2 id="question-text" class="question-text">Loading sequence...</h2>
+                    <div id="options-container" class="options-grid">
+                        <!-- Options injected by JS -->
+                    </div>
+                </div>
+
+                <div class="quiz-footer mono">SELECT ONE // NEURAL WEIGHT WILL BE APPLIED</div>
+            </div>
+        </section>
+
+        <!-- RESULT SECTION -->
+        <section id="result-section" class="section">
+            <div class="result-layout">
+                <!-- Result Card -->
+                <div id="result-card" class="result-card glass-panel">
+                    <div class="result-card-inner">
+                        <div class="result-aura" id="result-aura"></div>
+                        <div id="result-icon-wrapper" class="result-icon-wrapper">
+                            <span id="result-icon" class="result-icon">🎨</span>
+                        </div>
+
+                        <div class="result-label mono">ARCHETYPE DECODED</div>
+                        <h2 id="result-name" class="result-name">Frontend Wizard</h2>
+                        <div id="result-underline" class="result-underline"></div>
+                        <p id="result-description" class="result-description">You craft pixel-perfect realities...</p>
+
+                        <div id="result-traits" class="result-traits">
+                            <!-- injected -->
+                        </div>
+
+                        <div class="card-footer-branding mono">
+                            <span>DevDNA</span>
+                            <span>•</span>
+                            <span id="result-id">ID: FW-3849-X</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="result-actions">
+                    <button id="download-btn" class="btn btn-primary">
+                        <span class="btn-inner"><span>📥</span> Download Result Card</span>
+                    </button>
+                    <button id="share-btn" class="btn btn-secondary">
+                        <span class="btn-inner"><span>📤</span> Share Result</span>
+                    </button>
+                    <div id="copy-toast" class="toast hidden mono">✓ Copied to clipboard!</div>
+                </div>
+
+                <!-- Leaderboard -->
+                <div class="leaderboard glass-panel">
+                    <div class="leaderboard-header">
+                        <h3 class="leaderboard-title"><span class="icon">📊</span> Global DevDNA Stats</h3>
+                        <p class="leaderboard-sub mono">LIVE SYNC // UPDATING IN REAL-TIME VIA FIRESTORE</p>
+                    </div>
+
+                    <div id="leaderboard-list" class="leaderboard-list">
+                        <!-- Injected by JS -->
+                        <div class="leaderboard-loading mono">Syncing with neural network...</div>
+                    </div>
+
+                    <div id="firebase-status" class="firebase-status mono">
+                        ● CONNECTING TO DATABASE...
+                    </div>
+
+                    <div class="total-count mono" id="total-count"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer mono">
+        <span>DevDNA • Built for the future • No cookies. No tracking. Just code.</span>
+        <span class="footer-sep">|</span>
+        <span>devdna.onrender.com</span>
+    </footer>
+
+    <!-- Canvas for Download Generation (hidden) -->
+    <canvas id="export-canvas" width="1080" height="1350" style="display:none;"></canvas>
+
+    <!-- App Scripts (ES Modules) -->
+    <script type="module" src="firebase.js"></script>
+    <script type="module" src="script.js"></script>
+</body>
+</html>
