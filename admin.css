@@ -282,21 +282,54 @@
 
 .admin-stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
 }
 
+/* FIX 6: Big glowing neon numbers, not broken icons */
 .stat-card {
-    background: rgba(255,255,255,0.03);
+    background: rgba(255,255,255,0.04);
     border: 1px solid var(--border-glass);
-    border-radius: 12px;
-    padding: 14px;
+    border-radius: 14px;
+    padding: 18px 14px;
     text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.25s ease;
 }
-
-.stat-card .stat-emoji { font-size: 22px; margin-bottom: 4px; display: block; }
-.stat-card .stat-name { font-size: 11px; font-family: var(--font-mono); color: var(--text-muted); letter-spacing: 0.06em; }
-.stat-card .stat-count { font-size: 24px; font-weight: 800; font-family: var(--font-display); color: white; margin-top: 2px; }
+.stat-card:hover {
+    background: rgba(255,255,255,0.06);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.stat-card .stat-emoji { font-size: 26px; margin-bottom: 6px; display: block; filter: drop-shadow(0 0 8px rgba(255,255,255,0.3)); }
+.stat-card .stat-name {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    letter-spacing: 0.12em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+.stat-card .stat-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: var(--text-muted);
+    opacity: 0.8;
+    margin-bottom: 4px;
+}
+.stat-card .stat-count {
+    font-size: 48px; /* BIG per spec */
+    font-weight: 900;
+    font-family: var(--font-display);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--neon-purple);
+    text-shadow: 0 0 12px currentColor, 0 0 28px currentColor, 0 0 48px currentColor;
+    margin-top: 2px;
+    display: block;
+}
 
 .admin-input-sm {
     width: 100%;
