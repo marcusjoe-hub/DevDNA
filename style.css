@@ -125,25 +125,37 @@ body.custom-cursor-active a, body.custom-cursor-active button { cursor: none; }
 .pulse-dot { width:7px; height:7px; background:var(--neon-green); border-radius:50%; box-shadow:0 0 10px var(--neon-green); animation:pulse 1.8s infinite; }
 .top-bar-line { flex:1; height:1px; margin:0 24px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent); }
 
-/* Announcement Banner */
+/* Announcement Banner - FIX 7: Fixed above header, neon, pulse */
 .announcement-banner {
-    position: sticky; top:64px; z-index:19;
-    background: linear-gradient(90deg, rgba(168,85,247,0.15), rgba(0,204,255,0.15));
-    border-bottom:1px solid rgba(168,85,247,0.25);
-    backdrop-filter: blur(12px);
-    padding:10px 20px;
+    position: fixed; top:0; left:0; right:0; z-index:100;
+    background: linear-gradient(90deg, rgba(168,85,247,0.22), rgba(0,204,255,0.20));
+    border-bottom:1px solid rgba(168,85,247,0.35);
+    backdrop-filter: blur(14px) saturate(130%);
+    padding:12px 20px;
     text-align:center;
-    font-family:var(--font-mono); font-size:12px; letter-spacing:0.04em;
+    font-family:var(--font-mono); font-size:12px; letter-spacing:0.06em;
     color: var(--text-primary);
     display:none;
+    box-shadow: 0 4px 20px rgba(168,85,247,0.25), 0 0 30px rgba(0,204,255,0.15);
+    text-shadow: 0 0 10px rgba(168,85,247,0.6);
 }
-.announcement-banner.show { display:block; animation: slideDown 0.45s ease; }
+.announcement-banner.show {
+    display:block;
+    animation: slideDown 0.45s ease, bannerPulse 2.8s infinite;
+}
 @keyframes slideDown { from{ transform:translateY(-100%); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+@keyframes bannerPulse {
+    0%,100% { box-shadow: 0 4px 20px rgba(168,85,247,0.25), 0 0 30px rgba(0,204,255,0.15); border-bottom-color: rgba(168,85,247,0.35); }
+    50% { box-shadow: 0 6px 28px rgba(168,85,247,0.38), 0 0 45px rgba(0,204,255,0.22); border-bottom-color: rgba(0,204,255,0.45); }
+}
+/* When banner visible, push header down */
+body.has-banner .top-bar { top: var(--banner-height, 42px); }
+body.has-banner .app-container { padding-top: calc(32px + var(--banner-height, 42px)); }
 
-/* Sound Toggle */
+/* Sound Toggle - FIX 5: No overlap with SYSTEM ONLINE */
 .sound-toggle {
     position: fixed;
-    top: 14px; right: 86px;
+    top: 12px; right: 16px;
     z-index: 50;
     width: 40px; height: 40px;
     border-radius: 50%;
@@ -156,6 +168,14 @@ body.custom-cursor-active a, body.custom-cursor-active button { cursor: none; }
     transition: all 0.2s ease;
 }
 .sound-toggle:hover { background: rgba(255,255,255,0.12); transform: scale(1.06); }
+
+/* Header fix: SYSTEM ONLINE gets right margin to not overlap toggle */
+.system-status {
+    margin-right: 58px; /* space for sound toggle */
+}
+@media (max-width: 768px) {
+    .system-status { margin-right: 0; }
+}
 
 /* Custom Cursor */
 .custom-cursor {
@@ -618,7 +638,7 @@ body.custom-cursor-active a, body.custom-cursor-active button { cursor: none; }
     .deco-code{ text-align:center; }
     .hero-title{ text-shadow:0 0 14px rgba(168,85,247,0.5),0 0 30px rgba(168,85,247,0.25); }
     .sound-toggle{ top:auto; bottom:16px; right:16px; top: unset; width:44px; height:44px; }
-    .announcement-banner{ top:56px; }
+    .announcement-banner{ top:0; font-size:11px; padding:10px 14px; }
     .custom-cursor{ display:none !important; }
     body.custom-cursor-active{ cursor:auto; }
     body.custom-cursor-active a, body.custom-cursor-active button{ cursor:pointer; }
