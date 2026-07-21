@@ -42,13 +42,15 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, increment, onSnapshot, co
 // ============================================================================
 // 🔧 REPLACE WITH YOUR OWN FIREBASE CONFIG
 // ============================================================================
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDCUwsScuaiXdKX5IhMVsdpxquTrSv0Xks",
+  authDomain: "devdna-47ffe.firebaseapp.com",
+  projectId: "devdna-47ffe",
+  storageBucket: "devdna-47ffe.firebasestorage.app",
+  messagingSenderId: "507738623580",
+  appId: "1:507738623580:web:9d023f5ca2b75f85bc6099",
+  measurementId: "G-DX6F6MW85T"
 };
 // ============================================================================
 
