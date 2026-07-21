@@ -62,25 +62,38 @@ let firebaseInitialized = false;
 const STORAGE_KEY_COUNTS = 'devdna_fallback_counts_v1';
 const STORAGE_KEY_SETTINGS = 'devdna_fallback_settings_v1';
 
+// FIX 3: REMOVE fake mock numbers — counter must be real Firebase total only
+// If Firebase empty → show 0, never fake 556 etc.
 const defaultCounts = {
-    frontend: 127,
-    backend: 98,
-    fullstack: 143,
-    debugging: 76,
-    ai: 112,
-    total: 556
+    frontend: 0,
+    backend: 0,
+    fullstack: 0,
+    debugging: 0,
+    ai: 0,
+    total: 0
 };
 
+// FIX 4: Update year to 2026
 const defaultSettings = {
     eventLive: true,
-    announcement: "🎉 Welcome to Tec Toc 2025! Decode your DevDNA now!",
+    announcement: "🎉 Welcome to Tec Toc 2026!",
     announcementVisible: false
 };
 
 function getFallbackCounts() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY_COUNTS);
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            // FIX 3 migration: if old fake data (556 etc) exists, reset to 0 to avoid fake counter
+            // Old fake defaults were 127,98,143,76,112,556 — detect and wipe
+            const isOldFake = parsed.total === 556 && parsed.frontend === 127;
+            if (isOldFake) {
+                localStorage.setItem(STORAGE_KEY_COUNTS, JSON.stringify(defaultCounts));
+                return { ...defaultCounts };
+            }
+            return parsed;
+        }
         localStorage.setItem(STORAGE_KEY_COUNTS, JSON.stringify(defaultCounts));
         return { ...defaultCounts };
     } catch {
@@ -105,7 +118,7 @@ function setFallbackSettings(s) {
     try { localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(s)); } catch {}
 }
 
-// Mock listeners
+// Mock listeners + cross-tab sync for local testing (FIX 7 helper)
 let mockLeaderboardListeners = [];
 let mockSettingsListeners = [];
 
@@ -116,6 +129,14 @@ function triggerMockLeaderboard() {
 function triggerMockSettings() {
     const settings = getFallbackSettings();
     mockSettingsListeners.forEach(cb => { try { cb(settings); } catch {} });
+}
+
+// FIX 7: Cross-tab sync for mock mode — admin in one tab, main site in another instantly updates
+if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+        if (e.key === STORAGE_KEY_COUNTS) triggerMockLeaderboard();
+        if (e.key === STORAGE_KEY_SETTINGS) triggerMockSettings();
+    });
 }
 
 // ============================================================================
