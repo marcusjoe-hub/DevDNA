@@ -1,9 +1,10 @@
-[README.md](https://github.com/user-attachments/files/30228006/README.md)[Uploading # 🧬 DevDNA v2 — Tec Toc 2025 Massive Upgrade
+[README.md](https://github.com/user-attachments/files/30230836/README.md)
+# 🧬 DevDNA v2 — Tec Toc 2026 Massive Upgrade
 
 > Cyberpunk Developer Archetype Quiz — now with boot sequence, matrix rain, SFX, admin control center, live announcement banner, QR result cards, and hash-routed status pages.
 
 **Live URL:** `https://devdna-2trh.onrender.com/`  
-**Event:** Tec Toc 2025 • School Tech Showcase Ready  
+**Event:** Tec Toc 2026 • School Tech Showcase Ready  
 **Stack:** HTML, CSS, Vanilla JS (ES Modules), Firebase Firestore, QRCode.js CDN, Canvas API
 
 ---
@@ -45,7 +46,7 @@
   ```
   Glitch + fade into result with glow-in animation.
 - **Feature 9: Total Users Counter** — Landing below CTA: `⚡ [NUMBER] developers analyzed`, animated count-up 0→total from Firebase `total`.
-- **Feature 10: QR Code on Card** — Bottom-right QR linking to `https://devdna-2trh.onrender.com/` with neon border, plus bottom-left `Generated on 03 Oct 2025`.
+- **Feature 10: QR Code on Card** — Bottom-right QR linking to `https://devdna-2trh.onrender.com/` with neon border, plus bottom-left `Generated on 03 Oct 2026`.
 
 ### 🔒 Secret Admin Panel
 - **Route:** `https://devdna-2trh.onrender.com/#secret-admin-only`
@@ -157,7 +158,7 @@ Volume is coded to `0.35` (35%) soft. Toggle state saves in `localStorage['devdn
 3. Project Settings → General → Web app → Copy `firebaseConfig` → paste into `firebase.js`.
 4. **Collections to create** (auto-created on first write if you skip):
    - `devdna_leaderboard/global` → `{ frontend:0, backend:0, fullstack:0, debugging:0, ai:0, total:0 }`
-   - `settings/main` → `{ eventLive:true, announcement:"🎉 Welcome to Tec Toc 2025!", announcementVisible:false, updatedAt: Date.now() }`
+   - `settings/main` → `{ eventLive:true, announcement:"🎉 Welcome to Tec Toc 2026!", announcementVisible:false, updatedAt: Date.now() }`
 
 5. **Security Rules** (demo open):
 ```
@@ -260,7 +261,6 @@ MIT — Use for Tec Toc, portfolio, startup. Credit appreciated.
 
 ## 🙏 Credits
 
-v1 built as senior frontend piece; v2 massive upgrade for Tec Toc 2025 — boot sequence, matrix rain, SFX, QR cards, admin control center, hash routing, all vanilla.
+v1 built as senior frontend piece; v2 massive upgrade for Tec Toc 2026 — boot sequence, matrix rain, SFX, QR cards, admin control center, hash routing, all vanilla.
 
 *Decode. Reveal. Ship.*
-README.md…]()
