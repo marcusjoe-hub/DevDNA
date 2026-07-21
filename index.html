@@ -4,19 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <meta name="theme-color" content="#0a0a0f">
-    <meta name="description" content="DevDNA - Discover your developer archetype. Cyberpunk-themed quiz decoding your coding soul.">
+    <meta name="description" content="DevDNA v2 - Discover your developer archetype. Cyberpunk quiz with live leaderboard.">
     <title>DevDNA • Discover Your Developer Archetype</title>
 
-    <!-- Futuristic Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
-    <!-- Styles -->
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="admin.css">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧬</text></svg>">
 
-    <!-- Firebase ImportMap (works on Render & local server) -->
     <script type="importmap">
     {
         "imports": {
@@ -25,41 +23,80 @@
         }
     }
     </script>
+
+    <!-- QRCode.js for result card -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body>
-    <!-- Animated Background Layers -->
+    <!-- BOOT SCREEN (shows every visit ~2.5s) -->
+    <div id="boot-screen" class="boot-screen">
+        <div class="boot-terminal">
+            <div id="boot-lines"></div>
+            <div class="boot-loader">
+                <div class="boot-progress-track">
+                    <div id="boot-progress-fill" class="boot-progress-fill"></div>
+                </div>
+                <div class="boot-percent">
+                    <span id="boot-status-text" class="mono">INITIALIZING...</span>
+                    <span id="boot-percent-text" class="mono">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- REVEAL SEQUENCE (quiz complete drama) -->
+    <div id="reveal-sequence" class="reveal-sequence">
+        <div id="reveal-lines"></div>
+    </div>
+
+    <!-- Custom Cursor (desktop only) -->
+    <div id="custom-cursor" class="custom-cursor" aria-hidden="true">
+        <div class="cursor-dot"></div>
+        <div class="cursor-ring"></div>
+    </div>
+
+    <!-- Background Layers -->
     <div class="bg-gradient"></div>
     <canvas id="bg-canvas" aria-hidden="true"></canvas>
+    <canvas id="matrix-canvas" class="matrix-canvas" aria-hidden="true"></canvas>
     <div class="noise-overlay" aria-hidden="true"></div>
     <div class="grid-overlay" aria-hidden="true"></div>
 
-    <!-- Header / Brand Strip -->
+    <!-- Announcement Banner (controlled by admin) -->
+    <div id="announcement-banner" class="announcement-banner"></div>
+
+    <!-- Header -->
     <header class="top-bar">
         <div class="brand">
             <span class="brand-icon">🧬</span>
             <span class="brand-text">DevDNA</span>
-            <span class="brand-version">v1.0 / SYS.ARCHETYPE</span>
+            <span class="brand-version">v2.0 / TEC TOC 2025</span>
         </div>
         <div class="top-bar-line"></div>
         <div class="system-status">
-            <span class="pulse-dot"></span>
-            SYSTEM ONLINE
+            <span class="pulse-dot"></span> SYSTEM ONLINE
         </div>
     </header>
 
+    <!-- Sound Toggle Floating -->
+    <button id="sound-toggle" class="sound-toggle" aria-label="Toggle sound" title="Toggle sound">🔊</button>
+
+    <!-- Hidden QR container for canvas generation -->
+    <div id="qr-temp" style="position:absolute; left:-9999px; top:-9999px; width:120px; height:120px;"></div>
+
     <main class="app-container">
         <!-- LANDING SECTION -->
-        <section id="landing-section" class="section active">
+        <section id="landing-section" class="section">
             <div class="landing-content">
                 <div class="badge-wrapper">
                     <span class="neon-badge"><span class="badge-dot"></span> NEURAL SCAN READY // 12 QUESTIONS</span>
                 </div>
 
                 <h1 class="hero-title">
-                    <span class="title-glitch" data-text="DevDNA">DevDNA</span>
+                    <span id="hero-title-typed" class="title-glitch" data-text="DevDNA"></span><span id="hero-title-cursor" class="typing-cursor"></span>
                 </h1>
                 
-                <p class="hero-subtitle">Discover Your Developer Archetype</p>
+                <p class="hero-subtitle"><span id="hero-subtitle-typed"></span><span id="hero-subtitle-cursor" class="typing-cursor" style="display:none;"></span></p>
                 <p class="hero-desc">We decode your coding instincts, design cravings, and debug rituals to reveal the archetype hardwired into your source code.</p>
 
                 <button id="start-btn" class="btn btn-primary btn-glow">
@@ -68,6 +105,13 @@
                         <span class="btn-icon">▶</span>
                     </span>
                 </button>
+
+                <!-- Feature 9: Total Users Counter -->
+                <div id="total-users-counter" class="total-users-counter">
+                    <span>⚡</span>
+                    <span id="counter-num" class="counter-num">0</span>
+                    <span>developers analyzed</span>
+                </div>
 
                 <div class="archetype-preview">
                     <div class="preview-label">DETECTED ARCHETYPES IN DATABASE:</div>
@@ -95,7 +139,6 @@
         <!-- QUIZ SECTION -->
         <section id="quiz-section" class="section">
             <div class="quiz-container glass-panel">
-                <!-- Progress Header -->
                 <div class="progress-header">
                     <div class="progress-top">
                         <span id="question-counter" class="mono">QUESTION 01 / 12</span>
@@ -107,22 +150,32 @@
                     </div>
                 </div>
 
-                <!-- Question Wrapper (for transitions) -->
                 <div id="question-wrapper" class="question-wrapper">
                     <h2 id="question-text" class="question-text">Loading sequence...</h2>
-                    <div id="options-container" class="options-grid">
-                        <!-- Options injected by JS -->
-                    </div>
+                    <div id="options-container" class="options-grid"></div>
                 </div>
 
                 <div class="quiz-footer mono">SELECT ONE // NEURAL WEIGHT WILL BE APPLIED</div>
             </div>
         </section>
 
+        <!-- EVENT LOCKED SECTION -->
+        <section id="event-locked-section" class="section">
+            <div class="event-locked glass-panel">
+                <div class="locked-icon">🔒</div>
+                <h2 class="locked-title">DevDNA is locked.</h2>
+                <p class="locked-sub">Event starts soon. Stay tuned. The neural network is recalibrating for Tec Toc 2025.</p>
+                <div style="margin-top:24px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+                    > Signal encrypted.<br>
+                    > Awaiting admin authorization...<br>
+                    <span style="color:var(--neon-purple)">> Stay in loop @ tec toc</span>
+                </div>
+            </div>
+        </section>
+
         <!-- RESULT SECTION -->
         <section id="result-section" class="section">
             <div class="result-layout">
-                <!-- Result Card -->
                 <div id="result-card" class="result-card glass-panel">
                     <div class="result-card-inner">
                         <div class="result-aura" id="result-aura"></div>
@@ -135,19 +188,27 @@
                         <div id="result-underline" class="result-underline"></div>
                         <p id="result-description" class="result-description">You craft pixel-perfect realities...</p>
 
-                        <div id="result-traits" class="result-traits">
-                            <!-- injected -->
+                        <div id="result-traits" class="result-traits"></div>
+
+                        <!-- Feature 4: Best Pair -->
+                        <div id="best-pair" class="best-pair">
+                            <div class="best-pair-label mono">⚡ YOUR BEST PAIR</div>
+                            <div id="best-pair-name" class="best-pair-name">Backend Architect</div>
+                            <div id="best-pair-reason" class="best-pair-reason">"You design the dream, they build the engine."</div>
+                        </div>
+
+                        <!-- Feature 5: Full Breakdown -->
+                        <div id="full-breakdown" class="full-breakdown">
+                            <div class="breakdown-title mono">YOUR FULL DEV-DNA BREAKDOWN</div>
+                            <div id="breakdown-list"></div>
                         </div>
 
                         <div class="card-footer-branding mono">
-                            <span>DevDNA</span>
-                            <span>•</span>
-                            <span id="result-id">ID: FW-3849-X</span>
+                            <span>DevDNA</span><span>•</span><span id="result-id">ID: FW-3849-X</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Actions -->
                 <div class="result-actions">
                     <button id="download-btn" class="btn btn-primary">
                         <span class="btn-inner"><span>📥</span> Download Result Card</span>
@@ -155,42 +216,161 @@
                     <button id="share-btn" class="btn btn-secondary">
                         <span class="btn-inner"><span>📤</span> Share Result</span>
                     </button>
-                    <div id="copy-toast" class="toast hidden mono">✓ Copied to clipboard!</div>
                 </div>
 
-                <!-- Leaderboard -->
                 <div class="leaderboard glass-panel">
                     <div class="leaderboard-header">
                         <h3 class="leaderboard-title"><span class="icon">📊</span> Global DevDNA Stats</h3>
                         <p class="leaderboard-sub mono">LIVE SYNC // UPDATING IN REAL-TIME VIA FIRESTORE</p>
                     </div>
-
                     <div id="leaderboard-list" class="leaderboard-list">
-                        <!-- Injected by JS -->
                         <div class="leaderboard-loading mono">Syncing with neural network...</div>
                     </div>
-
-                    <div id="firebase-status" class="firebase-status mono">
-                        ● CONNECTING TO DATABASE...
-                    </div>
-
+                    <div id="firebase-status" class="firebase-status mono">● CONNECTING TO DATABASE...</div>
                     <div class="total-count mono" id="total-count"></div>
                 </div>
             </div>
         </section>
+
+        <!-- ADMIN SECTION -->
+        <section id="admin-section" class="section admin-section">
+            <!-- Login -->
+            <div id="admin-login" class="admin-login glass-panel">
+                <div class="admin-label">AUTHORIZATION REQUIRED</div>
+                <h2 class="admin-title">Admin Access</h2>
+                <p class="admin-sub">Enter access code to continue. Session logs are monitored.</p>
+                <div class="admin-input-wrap">
+                    <input id="admin-password" class="admin-input" type="password" placeholder="Enter access code..." autocomplete="off" spellcheck="false">
+                </div>
+                <button id="admin-auth-btn" class="btn btn-primary admin-btn">AUTHENTICATE</button>
+                <div id="admin-error" class="admin-error mono"></div>
+                <div id="admin-terminal-log" class="admin-terminal-log mono"></div>
+            </div>
+
+            <!-- Dashboard -->
+            <div id="admin-dashboard" class="admin-dashboard hidden">
+                <div class="admin-header glass-panel">
+                    <div class="admin-header-title">🧬 DevDNA Control Center</div>
+                    <button id="admin-logout" class="btn-admin-blue">LOGOUT</button>
+                </div>
+
+                <div class="admin-grid">
+                    <!-- Event Control -->
+                    <div class="admin-card glass-panel half">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">EVENT CONTROL</div>
+                            <div id="event-badge" class="admin-status-badge badge-live">🟢 LIVE</div>
+                        </div>
+                        <div class="admin-actions">
+                            <button id="admin-start-event" class="btn-admin-green">START EVENT</button>
+                            <button id="admin-close-event" class="btn-admin-red">CLOSE EVENT</button>
+                        </div>
+                        <div style="margin-top:12px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+                            When CLOSED, users see locked screen. Admin still works via #secret-admin-only
+                        </div>
+                    </div>
+
+                    <!-- Leaderboard Control -->
+                    <div class="admin-card glass-panel half">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">LEADERBOARD CONTROL</div>
+                            <div class="mono" style="font-size:11px; color:var(--text-muted);">Total: <span id="admin-total-subs" style="color:white; font-weight:700;">0</span></div>
+                        </div>
+                        <div class="admin-actions">
+                            <button id="admin-clear-data" class="btn-admin-red">CLEAR ALL SUBMISSIONS</button>
+                            <button id="admin-export-data" class="btn-admin-blue">DOWNLOAD LEADERBOARD DATA (JSON)</button>
+                        </div>
+                    </div>
+
+                    <!-- Stats -->
+                    <div class="admin-card glass-panel">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">STATS PER ARCHETYPE</div>
+                        </div>
+                        <div id="admin-stats-grid" class="admin-stats-grid"></div>
+                    </div>
+
+                    <!-- Announcement -->
+                    <div class="admin-card glass-panel">
+                        <div class="admin-card-header">
+                            <div class="admin-card-title">ANNOUNCEMENT BANNER</div>
+                        </div>
+                        <input id="admin-announcement-input" class="admin-input-sm" type="text" placeholder="Enter announcement message... e.g. 🎉 Welcome to Tec Toc 2025!">
+                        <div class="admin-actions">
+                            <button id="admin-update-banner" class="btn-admin-green">UPDATE BANNER</button>
+                            <button id="admin-hide-banner" class="btn-admin-blue">HIDE BANNER</button>
+                        </div>
+                        <div style="margin-top:10px; font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">
+                            Banner appears on top of main site instantly via Firestore real-time.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- UPTIME PING SECTION -->
+        <section id="uptime-section" class="section uptime-section">
+            <div class="glass-panel" style="padding:28px; border-radius:20px;">
+                <div class="uptime-badge"><span class="pulse-dot"></span> SYSTEM OPERATIONAL</div>
+                <h2 class="uptime-title">DevDNA STATUS: 🟢 ONLINE</h2>
+                <div class="uptime-grid">
+                    <div class="uptime-item"><span>Uptime:</span><strong id="uptime-duration">00:00:00</strong></div>
+                    <div class="uptime-item"><span>Last checked:</span><strong id="uptime-lastchecked">—</strong></div>
+                    <div class="uptime-item"><span>Server:</span><strong>Render • devdna-2trh.onrender.com</strong></div>
+                    <div class="uptime-item"><span>Firestore:</span><strong id="uptime-firestore">Checking...</strong></div>
+                </div>
+                <div style="margin-top:18px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); line-height:1.6;">
+                    System operational. Auto-refreshing every 30s to keep instance warm for Uptime Robot.<br>
+                    Pinging Firebase + keeping alive.
+                </div>
+            </div>
+        </section>
+
+        <!-- 404 SECTION -->
+        <section id="notfound-section" class="section notfound-section">
+            <div class="glass-panel" style="padding:36px 26px; border-radius:20px;">
+                <div class="error-code glitch">ERROR 404</div>
+                <div class="error-sub">ACCESS DENIED — RETURN TO BASE</div>
+                <div class="error-lines">
+                    > Signal lost.<br>
+                    > Coordinates: NULL<br>
+                    > Tracing route...<br>
+                    > Hash not recognized: <span id="notfound-hash" style="color:var(--neon-orange)">#unknown</span><br>
+                    > Reconnecting...
+                </div>
+                <button id="notfound-return" class="btn btn-primary btn-glow"><span class="btn-inner">RETURN TO DEVDNA</span></button>
+            </div>
+        </section>
+
     </main>
 
     <footer class="app-footer mono">
-        <span>DevDNA • Built for the future • No cookies. No tracking. Just code.</span>
+        <span>DevDNA v2 • Tec Toc 2025 • No cookies. No tracking. Just code.</span>
         <span class="footer-sep">|</span>
-        <span>devdna.onrender.com</span>
+        <span>devdna-2trh.onrender.com</span>
     </footer>
 
-    <!-- Canvas for Download Generation (hidden) -->
+    <!-- Floating Toast (Fix 3) -->
+    <div id="copy-toast" class="toast hidden mono">✓ Copied to clipboard!</div>
+
+    <!-- Confirm Modal for Admin -->
+    <div id="admin-confirm-modal" class="admin-confirm-modal hidden">
+        <div class="admin-confirm-box glass-panel">
+            <h4>⚠️ Are you sure?</h4>
+            <p>This will reset all archetype counts to zero. This cannot be undone.</p>
+            <div style="display:flex; gap:12px; justify-content:center;">
+                <button id="admin-confirm-no" class="btn-admin-blue">CANCEL</button>
+                <button id="admin-confirm-yes" class="btn-admin-red">YES, CLEAR ALL</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden canvas for download -->
     <canvas id="export-canvas" width="1080" height="1350" style="display:none;"></canvas>
 
-    <!-- App Scripts (ES Modules) -->
+    <!-- App Scripts -->
     <script type="module" src="firebase.js"></script>
+    <script type="module" src="admin.js"></script>
     <script type="module" src="script.js"></script>
 </body>
 </html>
