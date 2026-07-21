@@ -38,12 +38,13 @@ let leaderboardUnsub = null;
 let currentSettings = null;
 let currentCounts = null;
 
+// FIX 6: Add colors for big glowing numbers per archetype theme
 const ARCHETYPES = {
-    frontend: { name: 'Frontend Wizard', emoji: '🎨' },
-    backend: { name: 'Backend Architect', emoji: '🛠' },
-    fullstack: { name: 'Full Stack Ninja', emoji: '⚡' },
-    debugging: { name: 'Debugging Detective', emoji: '🐞' },
-    ai: { name: 'AI Explorer', emoji: '🤖' }
+    frontend: { name: 'Frontend Wizard', emoji: '🎨', color: '#00ccff' },
+    backend: { name: 'Backend Architect', emoji: '🛠', color: '#00ff99' },
+    fullstack: { name: 'Full Stack Ninja', emoji: '⚡', color: '#a855f7' },
+    debugging: { name: 'Debugging Detective', emoji: '🐞', color: '#ff8a00' },
+    ai: { name: 'AI Explorer', emoji: '🤖', color: '#00ffff' }
 };
 const ORDER = ['frontend','backend','fullstack','debugging','ai'];
 
@@ -129,10 +130,11 @@ function updateEventUI(live) {
     }
 }
 
+// FIX 6: Big glowing neon numbers with label COUNT, color per archetype, real-time
 function renderStats(counts) {
     currentCounts = counts;
-    const total = counts.total || ORDER.reduce((s,k)=>s+(counts[k]||0),0);
-    if (DOM.totalSubs) DOM.totalSubs.textContent = total.toLocaleString();
+    const total = counts.total !== undefined ? counts.total : ORDER.reduce((s,k)=>s+(counts[k]||0),0);
+    if (DOM.totalSubs) DOM.totalSubs.textContent = (total||0).toLocaleString();
 
     if (DOM.statsGrid) {
         DOM.statsGrid.innerHTML = '';
@@ -141,10 +143,13 @@ function renderStats(counts) {
             const count = counts[key] || 0;
             const card = document.createElement('div');
             card.className = 'stat-card';
+            // Neon color per archetype
+            card.style.borderColor = `${arch.color}33`;
             card.innerHTML = `
                 <span class="stat-emoji">${arch.emoji}</span>
                 <div class="stat-name">${arch.name}</div>
-                <div class="stat-count">${count}</div>
+                <div class="stat-label">DEVELOPERS</div>
+                <span class="stat-count" style="color:${arch.color}; text-shadow: 0 0 14px ${arch.color}, 0 0 32px ${arch.color}, 0 0 54px ${arch.color};">${count}</span>
             `;
             DOM.statsGrid.appendChild(card);
         });
