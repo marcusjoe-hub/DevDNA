@@ -1,21 +1,15 @@
 /**
- * DevDNA v2.1 - Bug Fixes
- * FIXES:
- * #1 Landing typing doubled -> guard + single execution after boot
- * #2 Hover sound spam -> removed hover SFX, volume 0.15, debounce clicks
- * #3 Fake 556 counter -> real Firebase total only, 0 if empty/fail
- * #4 Year 2025 -> 2026 (no hardcoded 2025 event text)
- * #5 Sound toggle overlap -> layout fixed via CSS + margin (handled in CSS, but JS keeps toggle)
- * #6 Admin stats broken icon -> handled in admin.css/js
- * #7 Announcement banner not showing -> fixed banner fixed top, body.has-banner, real-time listener, cross-tab sync
+ * DevDNA v3 - Main Quiz Logic with Firebase Questions + Theme Real-time + Click Sound Fix
+ * - Questions loaded from Firestore /questions/ (seed if empty)
+ * - Theme real-time via /settings/main/theme
+ * - FIX: Click sound plays on ALL button clicks (debounced, 15% volume, silent fail)
+ * - Banner + sound button overlap fix: sound button shifts below banner when visible
  */
 
-import { incrementArchetype, subscribeToLeaderboard, subscribeToSettings, isFirebaseConfigured } from './firebase.js';
+import { incrementArchetype, subscribeToLeaderboard, subscribeToSettings, getQuestions, seedQuestionsIfEmpty, isFirebaseConfigured } from './firebase.js';
 import { openAdminPanel, closeAdminPanel } from './admin.js';
+import { applyTheme, getCurrentTheme } from './themes.js';
 
-// ============================================================================
-// CONSTANTS
-// ============================================================================
 const SITE_URL = "https://devdna-2trh.onrender.com/";
 const SHARE_URL = SITE_URL;
 
@@ -34,7 +28,9 @@ const COMPATIBILITY = {
     debugging:{pair:'fullstack', reason:"You catch the chaos, they create the code."},
     ai:{pair:'frontend', reason:"You bring intelligence, they make it beautiful."}
 };
-const QUIZ_QUESTIONS = [
+
+// Hardcoded fallback (used to seed Firebase if empty)
+const HARDCODED_QUESTIONS = [
     { q:"You get an empty repo at hackathon kickoff. What’s your first commit?", options:[{text:"Design system, Tailwind, Framer Motion — make it feel alive.",archetype:"frontend"},{text:"DB schema, auth, REST API skeleton. Solid foundations first.",archetype:"backend"},{text:"Monorepo, frontend + backend + CI + deploy. Full pipeline.",archetype:"fullstack"},{text:"A script that uses an LLM to scaffold the whole thing from README.",archetype:"ai"}] },
     { q:"Production crashes 5 minutes before the demo. Your instinct?", options:[{text:"Add a gorgeous fallback UI and skeleton loaders so users don’t panic.",archetype:"frontend"},{text:"SSH in, check logs, scale up, fix the race condition.",archetype:"backend"},{text:"Reproduce step-by-step, bisect commits, write a minimal failing test.",archetype:"debugging"},{text:"Paste the trace into AI and ask it to hypothesize root causes.",archetype:"ai"}] },
     { q:"Your dream side project on a weekend?", options:[{text:"Recreating Linear.app’s homepage animations — but better.",archetype:"frontend"},{text:"Building a real-time collaborative engine with WebSockets & Redis.",archetype:"backend"},{text:"Shipping a full SaaS: landing, payments, dashboard, analytics.",archetype:"fullstack"},{text:"Finding a memory leak that’s haunted your old project for months.",archetype:"debugging"}] },
@@ -49,22 +45,20 @@ const QUIZ_QUESTIONS = [
     { q:"Final boss: What’s your ultimate dev fantasy?", options:[{text:"Building an interface so good people screenshot it for inspiration.",archetype:"frontend"},{text:"Architecting a system that serves a billion users without flinching.",archetype:"backend"},{text:"Solo-shipping a product that hits #1 on Product Hunt.",archetype:"fullstack"},{text:"Creating a self-healing codebase that fixes bugs before humans notice.",archetype:"ai"}] }
 ];
 
-// ============================================================================
-// STATE
-// ============================================================================
+let QUIZ_QUESTIONS = [...HARDCODED_QUESTIONS]; // will be overwritten by Firebase
+let quizSessionQuestions = null; // cached for entire quiz session
+
+// State
 let currentIndex=0;
 let scores={frontend:0,backend:0,fullstack:0,debugging:0,ai:0};
 let resultArchetype=null;
 let leaderboardUnsub=null;
 let settingsUnsub=null;
-let currentSettings={eventLive:true, announcement:"", announcementVisible:false};
+let currentSettings={eventLive:true, announcement:"", announcementVisible:false, theme:"cyberpunk"};
 let totalDevelopers=0;
 let soundEnabled=true;
 let bootDone=false;
-
-// FIX 1: Guard to prevent double typing
 let typingInProgress=false;
-let typingAbort=false;
 
 const DOM = {
     bootScreen: document.getElementById('boot-screen'),
@@ -127,30 +121,30 @@ const DOM = {
     uptimeFirestore: document.getElementById('uptime-firestore')
 };
 
-// ============================================================================
-// SOUND SYSTEM - FIX 2: No hover spam, volume 0.15, debounce
-// ============================================================================
+// SOUND FIX: Click only, volume 0.15, debounce, plays on ALL button clicks
 const SOUND_FILES = { click:'audio/click.mp3', select:'audio/select.mp3', complete:'audio/complete.mp3', reveal:'audio/reveal.mp3', error:'audio/select.mp3' };
 let audioElements = {};
-let lastSFXTime = {}; // debounce map
-
+let lastSFXTime = {};
 function initSound(){
-    try{
-        const saved=localStorage.getItem('devdna_sound_enabled');
-        soundEnabled = saved===null ? true : saved==='true';
-    }catch{ soundEnabled=true; }
+    try{ const saved=localStorage.getItem('devdna_sound_enabled'); soundEnabled = saved===null ? true : saved==='true'; }catch{ soundEnabled=true; }
     updateSoundIcon();
     Object.keys(SOUND_FILES).forEach(key=>{
-        const a=new Audio();
-        a.src=SOUND_FILES[key];
-        a.preload='auto';
-        a.volume=0.15; // FIX 2: reduced from 0.35 to 0.15
-        a.crossOrigin='anonymous';
-        audioElements[key]=a;
-        a.load();
-        a.addEventListener('error', ()=>console.warn(`[DevDNA] Audio ${key} not found`));
+        const a=new Audio(); a.src=SOUND_FILES[key]; a.preload='auto'; a.volume=0.15; a.crossOrigin='anonymous'; audioElements[key]=a; a.load();
+        a.addEventListener('error',()=>console.warn(`[DevDNA] Audio ${key} not found`));
     });
     DOM.soundToggle?.addEventListener('click', toggleSound);
+    // FIX: Global click listener — plays click SFX on ANY button click (not hover)
+    document.addEventListener('click', (e)=>{
+        const target = e.target.closest('button, .option-card, .sidebar-tab');
+        if(target){
+            // don't double play if button already handles its own select sound
+            if(target.classList.contains('option-card')){
+                // option-card has its own select sound, skip click
+                return;
+            }
+            playSFX('click');
+        }
+    }, true); // capture phase to ensure antes
 }
 function toggleSound(){
     soundEnabled=!soundEnabled;
@@ -167,21 +161,14 @@ function playSFX(name){
     if(!soundEnabled) return;
     const now=Date.now();
     const last=lastSFXTime[name]||0;
-    if(now-last < 120){ return; } // debounce 120ms to prevent overlap/spam
+    if(now-last < 120) return; // debounce
     lastSFXTime[name]=now;
     const a=audioElements[name];
     if(!a) return;
-    try{
-        a.currentTime=0;
-        const p=a.play();
-        if(p && p.catch) p.catch(()=>{});
-    }catch{}
+    try{ a.currentTime=0; const p=a.play(); if(p&&p.catch) p.catch(()=>{}); }catch{}
 }
-// REMOVED: bindHoverSFX() entirely per FIX 2 — no hover sounds
 
-// ============================================================================
 // Backgrounds
-// ============================================================================
 function initMatrixRain(){
     const canvas=DOM.matrixCanvas; if(!canvas) return;
     const ctx=canvas.getContext('2d',{alpha:true});
@@ -219,9 +206,7 @@ function initCustomCursor(){
     window.addEventListener('mousemove',(e)=>{ const now=Date.now(); if(now-lastTrail<80) return; lastTrail=now; const trail=document.createElement('div'); trail.className='cursor-trail'; trail.style.left=e.clientX+'px'; trail.style.top=e.clientY+'px'; document.body.appendChild(trail); trail.animate([{transform:'translate(-50%,-50%) scale(1)',opacity:0.6},{transform:'translate(-50%,-50%) scale(0)',opacity:0}],{duration:400,easing:'ease-out'}).onfinish=()=>trail.remove(); });
 }
 
-// ============================================================================
-// BOOT SCREEN
-// ============================================================================
+// Boot
 const BOOT_LINES=['> Initializing DevDNA...','> Loading neural weights...','> Connecting to archetype database...','> System ready.'];
 function runBootScreen(){
     return new Promise(resolve=>{
@@ -235,66 +220,70 @@ function runBootScreen(){
     });
 }
 
-// ============================================================================
-// TYPING ANIMATION - FIX 1: Guard to prevent double execution
-// ============================================================================
+// Typing - guard
 function typeWriter(element, text, speed=50){
     return new Promise(resolve=>{
-        // FIX 1: Clear existing text before starting
-        if(!element) { resolve(); return; }
+        if(!element){ resolve(); return; }
         element.textContent='';
         let i=0;
-        if(typingAbort){ resolve(); return; }
         const interval=setInterval(()=>{
-            if(typingAbort){ clearInterval(interval); resolve(); return; }
-            if(i < text.length){
-                element.textContent+=text[i];
-                i++;
-            } else {
-                clearInterval(interval);
-                resolve();
-            }
+            if(i < text.length){ element.textContent+=text[i]; i++; } else { clearInterval(interval); resolve(); }
         }, speed);
     });
 }
-
 async function runLandingTyping(){
-    // FIX 1: Guard — ensure typing runs exactly once
-    if(typingInProgress){
-        console.log('[DevDNA] Typing already in progress, skipping duplicate');
-        return;
-    }
+    if(typingInProgress) return;
     typingInProgress=true;
-    typingAbort=false;
-
     try{
-        const title='DevDNA';
-        const subtitle='Discover Your Developer Archetype';
-
-        // FIX 1: Clear any existing text before starting
+        const title='DevDNA'; const subtitle='Discover Your Developer Archetype';
         if(DOM.heroTitleTyped) DOM.heroTitleTyped.textContent='';
         if(DOM.heroSubtitleTyped) DOM.heroSubtitleTyped.textContent='';
         if(DOM.heroTitleCursor) DOM.heroTitleCursor.style.display='inline-block';
         if(DOM.heroSubtitleCursor) DOM.heroSubtitleCursor.style.display='none';
-
         await typeWriter(DOM.heroTitleTyped, title, 90);
-
         if(DOM.heroTitleCursor) DOM.heroTitleCursor.style.display='none';
         if(DOM.heroSubtitleCursor) DOM.heroSubtitleCursor.style.display='inline-block';
-
         await typeWriter(DOM.heroSubtitleTyped, subtitle, 42);
-    } finally {
-        typingInProgress=false;
+    } finally { typingInProgress=false; }
+}
+
+// Quiz with Firebase questions
+async function loadQuestionsFromFirebase(){
+    try{
+        // Seed if empty
+        const seeded = await seedQuestionsIfEmpty(HARDCODED_QUESTIONS);
+        if(seeded && seeded.length>0){
+            // Transform to expected format
+            QUIZ_QUESTIONS = seeded.map(q=>({
+                id: q.id,
+                q: q.text,
+                text: q.text,
+                options: q.options.map(o=>({text:o.text, archetype:o.archetype}))
+            }));
+            console.log(`[DevDNA] Loaded ${QUIZ_QUESTIONS.length} questions from Firebase`);
+        } else {
+            const qs = await getQuestions();
+            if(qs.length>0){
+                QUIZ_QUESTIONS = qs.map(q=>({
+                    id: q.id,
+                    q: q.text,
+                    text: q.text,
+                    options: q.options.map(o=>({text:o.text, archetype:o.archetype}))
+                }));
+            }
+        }
+    }catch(e){
+        console.warn('[DevDNA] Failed to load questions from Firebase, using hardcoded', e);
+        QUIZ_QUESTIONS = [...HARDCODED_QUESTIONS].map((q,i)=>({id:`hardcoded_${i}`, ...q}));
     }
 }
 
-// ============================================================================
-// QUIZ LOGIC
-// ============================================================================
 function startQuiz(){
     if(!currentSettings.eventLive){ showLocked(); return; }
-    playSFX('complete'); // FIX 2: only on click, not hover, soft 15%
+    playSFX('complete');
     currentIndex=0; scores={frontend:0,backend:0,fullstack:0,debugging:0,ai:0};
+    // Cache questions for this session (so mid-quiz edits don't affect current player)
+    quizSessionQuestions = [...QUIZ_QUESTIONS];
     DOM.landing.classList.remove('active');
     setTimeout(()=>{
         DOM.landing.style.display='none';
@@ -305,18 +294,20 @@ function startQuiz(){
     },350);
 }
 function renderQuestion(index){
-    const data=QUIZ_QUESTIONS[index]; if(!data) return;
-    const displayProgress=Math.round(((index+1)/QUIZ_QUESTIONS.length)*100);
-    DOM.qCounter.textContent=`QUESTION ${String(index+1).padStart(2,'0')} / ${String(QUIZ_QUESTIONS.length).padStart(2,'0')}`;
+    const data=quizSessionQuestions ? quizSessionQuestions[index] : QUIZ_QUESTIONS[index];
+    if(!data) return;
+    const totalQs = quizSessionQuestions ? quizSessionQuestions.length : QUIZ_QUESTIONS.length;
+    const displayProgress=Math.round(((index+1)/totalQs)*100);
+    DOM.qCounter.textContent=`QUESTION ${String(index+1).padStart(2,'0')} / ${String(totalQs).padStart(2,'0')}`;
     DOM.qPercent.textContent=`${displayProgress}%`;
     DOM.progressFill.style.width=`${displayProgress}%`;
     if(DOM.progressGlow) DOM.progressGlow.style.width=`${displayProgress}%`;
     DOM.qWrapper.classList.add('out');
     setTimeout(()=>{
-        DOM.qText.textContent=data.q;
+        DOM.qText.textContent=data.q || data.text;
         DOM.optionsContainer.innerHTML='';
         const letters=['A','B','C','D'];
-        data.options.forEach((opt,i)=>{
+        (data.options||[]).forEach((opt,i)=>{
             const btn=document.createElement('button');
             btn.className='option-card';
             btn.dataset.archetype=opt.archetype;
@@ -336,13 +327,14 @@ function renderQuestion(index){
 }
 function selectOption(archetype, btnEl){
     if(btnEl.classList.contains('selected')) return;
-    playSFX('select'); // click only
+    playSFX('select'); // select beep
     document.querySelectorAll('.option-card').forEach(b=>b.classList.remove('selected'));
     btnEl.classList.add('selected');
     scores[archetype]=(scores[archetype]||0)+1;
     if(navigator.vibrate) navigator.vibrate(16);
     setTimeout(()=>{
-        if(currentIndex<QUIZ_QUESTIONS.length-1){ currentIndex++; renderQuestion(currentIndex); }
+        const totalQs = quizSessionQuestions ? quizSessionQuestions.length : QUIZ_QUESTIONS.length;
+        if(currentIndex<totalQs-1){ currentIndex++; renderQuestion(currentIndex); }
         else { finishQuizReveal(); }
     },420);
 }
@@ -422,9 +414,7 @@ function renderBreakdown(scoreObj){
     });
 }
 
-// ============================================================================
-// Leaderboard + FIX 3 real counter only
-// ============================================================================
+// Leaderboard
 function setupLeaderboard(){
     if(isFirebaseConfigured()){
         DOM.firebaseStatus.innerHTML=`<span style="color:var(--neon-green)">● LIVE</span> CONNECTED TO FIRESTORE // REAL-TIME SYNC`;
@@ -434,9 +424,8 @@ function setupLeaderboard(){
     if(leaderboardUnsub) leaderboardUnsub();
     leaderboardUnsub=subscribeToLeaderboard((counts)=>{
         renderLeaderboard(counts);
-        // FIX 3: Real total only — if Firebase fails, counts.total will be 0 (not fake 556)
         const realTotal = counts.total !== undefined ? counts.total : Object.keys(counts).filter(k=>k!=='total').reduce((s,k)=>s+(counts[k]||0),0);
-        totalDevelopers = realTotal; // can be 0
+        totalDevelopers = realTotal;
         animateTotalCounter(totalDevelopers);
     });
 }
@@ -457,12 +446,11 @@ function renderLeaderboard(counts){
     DOM.totalCount.textContent=`TOTAL DECODED: ${displayTotal.toLocaleString()} developers worldwide`;
 }
 
-// FIX 3: Counter shows real number, 0 if empty, animated 0->real
+// Counter
 let counterAnimRaf=null;
 let lastAnimatedTotal=-1;
 function animateTotalCounter(target){
     if(!DOM.counterNum) return;
-    // FIX 3: If Firebase returns 0, show 0 — never hide, never fake
     const realTarget = Number.isFinite(target) ? target : 0;
     if(realTarget===lastAnimatedTotal) return;
     lastAnimatedTotal=realTarget;
@@ -481,9 +469,7 @@ function animateTotalCounter(target){
     tick();
 }
 
-// ============================================================================
 // Canvas Export
-// ============================================================================
 function wrapText(ctx,text,x,y,maxWidth,lineHeight){
     const words=text.split(' '); let line='',curY=y;
     for(let n=0;n<words.length;n++){
@@ -517,22 +503,22 @@ async function generateResultCard(){
     ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1; for(let x=0;x<W;x+=48){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); } for(let y=0;y<H;y+=48){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
     ctx.strokeStyle='rgba(255,255,255,0.09)'; ctx.lineWidth=1; ctx.strokeRect(36,36,W-72,H-72);
     ctx.strokeStyle=arch.color+'66'; ctx.lineWidth=2.2; ctx.strokeRect(34,34,W-68,H-68);
-    ctx.save(); ctx.globalAlpha=0.12; ctx.fillStyle='white'; ctx.font='900 210px \"Orbitron\", sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('DevDNA',W/2,H/2); ctx.restore();
+    ctx.save(); ctx.globalAlpha=0.12; ctx.fillStyle='white'; ctx.font='900 210px "Orbitron", sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('DevDNA',W/2,H/2); ctx.restore();
     ctx.save(); ctx.globalAlpha=0.55; ctx.filter='blur(42px)'; ctx.fillStyle=arch.color; ctx.beginPath(); ctx.arc(W/2,380,145,0,Math.PI*2); ctx.fill(); ctx.restore(); ctx.filter='none';
-    ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.font='600 22px \"JetBrains Mono\", monospace'; ctx.textAlign='center'; ctx.fillText('DevDNA',W/2,110);
-    ctx.fillStyle='rgba(161,161,181,0.75)'; ctx.font='500 16px \"JetBrains Mono\", monospace'; ctx.fillText('ARCHETYPE DECODED // SYS.V1',W/2,140);
+    ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.font='600 22px "JetBrains Mono", monospace'; ctx.textAlign='center'; ctx.fillText('DevDNA',W/2,110);
+    ctx.fillStyle='rgba(161,161,181,0.75)'; ctx.font='500 16px "JetBrains Mono", monospace'; ctx.fillText('ARCHETYPE DECODED // SYS.V1',W/2,140);
     ctx.save(); ctx.shadowColor=arch.color; ctx.shadowBlur=36; ctx.fillStyle='rgba(255,255,255,0.09)'; ctx.strokeStyle=arch.color+'AA'; ctx.lineWidth=2.5; ctx.beginPath(); if(ctx.roundRect){ ctx.roundRect(W/2-88,190,176,176,30); } else { ctx.rect(W/2-88,190,176,176); } ctx.fill(); ctx.stroke(); ctx.restore();
     ctx.save(); ctx.shadowColor=arch.color; ctx.shadowBlur=28; ctx.font='92px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='white'; ctx.fillText(arch.emoji,W/2,278); ctx.shadowBlur=16; ctx.fillText(arch.emoji,W/2,278); ctx.restore();
-    ctx.fillStyle='white'; ctx.font='900 58px \"Orbitron\", sans-serif'; ctx.textAlign='center'; ctx.fillText(arch.name.toUpperCase(),W/2,470);
+    ctx.fillStyle='white'; ctx.font='900 58px "Orbitron", sans-serif'; ctx.textAlign='center'; ctx.fillText(arch.name.toUpperCase(),W/2,470);
     const grad=ctx.createLinearGradient(W/2-90,0,W/2+90,0); grad.addColorStop(0,arch.gradient[0]); grad.addColorStop(1,arch.gradient[1]); ctx.fillStyle=grad; ctx.fillRect(W/2-80,494,160,4);
-    ctx.fillStyle='#c5c5d6'; ctx.font='400 26px \"Space Grotesk\", sans-serif'; ctx.textAlign='center'; const afterDesc=wrapText(ctx,arch.description,W/2,550,780,36);
-    ctx.fillStyle='#d9d9e6'; ctx.font='600 19px \"JetBrains Mono\", monospace'; ctx.fillText(arch.traits.join(' • ').toUpperCase(),W/2,afterDesc+34);
+    ctx.fillStyle='#c5c5d6'; ctx.font='400 26px "Space Grotesk", sans-serif'; ctx.textAlign='center'; const afterDesc=wrapText(ctx,arch.description,W/2,550,780,36);
+    ctx.fillStyle='#d9d9e6'; ctx.font='600 19px "JetBrains Mono", monospace'; ctx.fillText(arch.traits.join(' • ').toUpperCase(),W/2,afterDesc+34);
     const compat=COMPATIBILITY[arch.key];
-    if(compat){ const pair=ARCHETYPES[compat.pair]; ctx.fillStyle='rgba(168,85,247,0.9)'; ctx.font='700 16px \"JetBrains Mono\"'; ctx.fillText(`BEST PAIR: ${pair.name.toUpperCase()}`,W/2,afterDesc+74); ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.font='400 15px \"Space Grotesk\"'; ctx.fillText(`"${compat.reason}"`,W/2,afterDesc+98); }
+    if(compat){ const pair=ARCHETYPES[compat.pair]; ctx.fillStyle='rgba(168,85,247,0.9)'; ctx.font='700 16px "JetBrains Mono"'; ctx.fillText(`BEST PAIR: ${pair.name.toUpperCase()}`,W/2,afterDesc+74); ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.font='400 15px "Space Grotesk"'; ctx.fillText(`"${compat.reason}"`,W/2,afterDesc+98); }
     ctx.strokeStyle='rgba(255,255,255,0.09)'; ctx.beginPath(); ctx.moveTo(96,H-190); ctx.lineTo(W-96,H-190); ctx.stroke();
     const dateStr=new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-    ctx.fillStyle='rgba(255,255,255,0.42)'; ctx.font='500 16px \"JetBrains Mono\"'; ctx.textAlign='left'; ctx.fillText(`Generated on ${dateStr}`,96,H-132);
-    ctx.fillStyle='rgba(255,255,255,0.40)'; ctx.font='500 14px \"JetBrains Mono\"'; ctx.fillText(SITE_URL.replace('https://',''),96,H-108);
+    ctx.fillStyle='rgba(255,255,255,0.42)'; ctx.font='500 16px "JetBrains Mono"'; ctx.textAlign='left'; ctx.fillText(`Generated on ${dateStr}`,96,H-132);
+    ctx.fillStyle='rgba(255,255,255,0.40)'; ctx.font='500 14px "JetBrains Mono"'; ctx.fillText(SITE_URL.replace('https://',''),96,H-108);
     try{
         const qrDataUrl=await generateQRCodeDataURL(SITE_URL);
         const qrImg=new Image(); qrImg.src=qrDataUrl;
@@ -540,10 +526,10 @@ async function generateResultCard(){
         const qrSize=108; const qrX=W-96-qrSize; const qrY=H-170;
         ctx.save(); ctx.shadowColor=arch.color; ctx.shadowBlur=22; ctx.strokeStyle=arch.color+'BB'; ctx.lineWidth=2; ctx.strokeRect(qrX-6,qrY-6,qrSize+12,qrSize+12); ctx.restore();
         ctx.drawImage(qrImg,qrX,qrY,qrSize,qrSize);
-        ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.font='600 10px \"JetBrains Mono\"'; ctx.textAlign='center'; ctx.fillText('SCAN TO TRY',qrX+qrSize/2,qrY+qrSize+14);
+        ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.font='600 10px "JetBrains Mono"'; ctx.textAlign='center'; ctx.fillText('SCAN TO TRY',qrX+qrSize/2,qrY+qrSize+14);
     }catch(e){ console.warn('QR generation failed',e); }
-    ctx.fillStyle='rgba(255,255,255,0.36)'; ctx.font='500 13px \"JetBrains Mono\"'; ctx.textAlign='right'; ctx.fillText(`ID: ${arch.key.toUpperCase()}-${Math.floor(1000+Math.random()*9000)}-X`,W-96,H-132);
-    ctx.textAlign='center'; ctx.fillStyle='rgba(255,255,255,0.28)'; ctx.font='400 13px \"JetBrains Mono\"'; ctx.fillText('BUILT FOR THE FUTURE • NO COOKIES. JUST CODE.',W/2,H-70);
+    ctx.fillStyle='rgba(255,255,255,0.36)'; ctx.font='500 13px "JetBrains Mono"'; ctx.textAlign='right'; ctx.fillText(`ID: ${arch.key.toUpperCase()}-${Math.floor(1000+Math.random()*9000)}-X`,W-96,H-132);
+    ctx.textAlign='center'; ctx.fillStyle='rgba(255,255,255,0.28)'; ctx.font='400 13px "JetBrains Mono"'; ctx.fillText('BUILT FOR THE FUTURE • NO COOKIES. JUST CODE.',W/2,H-70);
     return canvas.toDataURL('image/png');
 }
 async function handleDownload(){
@@ -562,15 +548,13 @@ async function handleShare(){
 }
 function showToast(){ DOM.toast.classList.remove('hidden'); DOM.toast.classList.add('show'); setTimeout(()=>{ DOM.toast.classList.remove('show'); DOM.toast.classList.add('hidden'); },2500); if(navigator.vibrate) navigator.vibrate(20); }
 
-// ============================================================================
-// Routing + Announcement FIX 7
-// ============================================================================
+// Routing + Banner + Theme
 function hideAllSections(){ [DOM.landing,DOM.quiz,DOM.result,DOM.locked,DOM.admin,DOM.uptime,DOM.notfound].forEach(s=>{ if(s){ s.style.display='none'; s.classList.remove('active'); } }); }
 function showLanding(){
     hideAllSections(); closeAdminPanel();
     if(!currentSettings.eventLive){ showLocked(); return; }
     DOM.landing.style.display='block'; void DOM.landing.offsetWidth; DOM.landing.classList.add('active');
-    if(bootDone){ runLandingTyping(); } // only after boot, guard prevents double
+    if(bootDone){ runLandingTyping(); }
 }
 function showLocked(){ hideAllSections(); DOM.locked.style.display='block'; void DOM.locked.offsetWidth; DOM.locked.classList.add('active'); }
 function showUptime(){ hideAllSections(); DOM.uptime.style.display='block'; void DOM.uptime.offsetWidth; DOM.uptime.classList.add('active'); startUptimeTimer(); }
@@ -584,26 +568,35 @@ function handleRouter(){
     if(['#quiz','#result'].includes(hash)){ if(DOM.result.classList.contains('active')||DOM.quiz.classList.contains('active')) return; showLanding(); return; }
     if(hash.startsWith('#')){ show404(); } else { showLanding(); }
 }
-
-// FIX 7: Announcement banner real-time + fixed top + has-banner class
-function setupAnnouncementListener(){
+function setupAnnouncementAndTheme(){
     if(settingsUnsub) settingsUnsub();
     settingsUnsub=subscribeToSettings((settings)=>{
         currentSettings=settings;
-        // Show/hide banner
+        // Banner - FIX B: push header + sound button down when visible
         if(settings.announcementVisible && settings.announcement && settings.announcement.trim()!==''){
             DOM.announcementBanner.textContent=settings.announcement;
             DOM.announcementBanner.classList.add('show');
             document.body.classList.add('has-banner');
-            // measure height for offset
             requestAnimationFrame(()=>{
                 const h=DOM.announcementBanner.offsetHeight;
                 document.documentElement.style.setProperty('--banner-height', `${h}px`);
+                // Move sound button below banner
+                if(DOM.soundToggle){
+                    DOM.soundToggle.style.top = `${h + 12}px`;
+                }
             });
         } else {
             DOM.announcementBanner.classList.remove('show');
             document.body.classList.remove('has-banner');
             document.documentElement.style.setProperty('--banner-height','0px');
+            if(DOM.soundToggle){
+                // Reset to CSS default
+                DOM.soundToggle.style.top = '';
+            }
+        }
+        // Theme real-time
+        if(settings.theme && settings.theme!==getCurrentTheme()){
+            applyTheme(settings.theme);
         }
         if(!settings.eventLive){
             if(!location.hash.includes('secret-admin-only') && !location.hash.includes('uptime-ping')){
@@ -631,22 +624,24 @@ function startUptimeTimer(){
     update(); uptimeInterval=setInterval(update,1000);
 }
 
-// ============================================================================
-// Init - FIX 1: Remove double showLanding
-// ============================================================================
+// Init
 async function init(){
-    console.log('%c🧬 DevDNA v2.1 Bug Fixed','color:#a855f7; font-size:16px; font-weight:bold;');
+    console.log('%c🧬 DevDNA v3','color:#a855f7; font-size:16px; font-weight:bold;');
     initSound();
     initParticles();
     initMatrixRain();
     initCustomCursor();
     hideAllSections();
     DOM.bootScreen.style.display='flex';
-    setupAnnouncementListener();
+    
+    // Load questions early (parallel with boot)
+    await loadQuestionsFromFirebase();
+
+    setupAnnouncementAndTheme();
     await runBootScreen();
     bootDone=true;
     window.addEventListener('hashchange', handleRouter);
-    handleRouter(); // single call — FIX 1: removed duplicate showLanding
+    handleRouter();
     DOM.startBtn?.addEventListener('click', startQuiz);
     DOM.downloadBtn?.addEventListener('click', handleDownload);
     DOM.shareBtn?.addEventListener('click', handleShare);
@@ -658,7 +653,7 @@ async function init(){
             if(map[e.key]!==undefined){ const btns=document.querySelectorAll('.option-card'); if(btns[map[e.key]]) btns[map[e.key]].click(); }
         }
     });
-    window.__DevDNA={scores,ARCHETYPES,QUIZ_QUESTIONS,startQuiz,playSFX,SITE_URL};
+    window.__DevDNA={scores,ARCHETYPES,QUIZ_QUESTIONS,startQuiz,playSFX,SITE_URL, HARDCODED_QUESTIONS};
     setupLeaderboard();
 }
 if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',init); } else { init(); }
