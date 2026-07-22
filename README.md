@@ -1,166 +1,144 @@
-[README.md](https://github.com/user-attachments/files/30230836/README.md)
-# 🧬 DevDNA v2 — Tec Toc 2026 Massive Upgrade
+[README.md](https://github.com/user-attachments/files/30272737/README.md)
+# 🧬 DevDNA v3.0 — Tec Toc 2026 Enterprise Admin Overhaul
 
-> Cyberpunk Developer Archetype Quiz — now with boot sequence, matrix rain, SFX, admin control center, live announcement banner, QR result cards, and hash-routed status pages.
+> Cyberpunk Developer Archetype Quiz — now enterprise-grade: Google Auth, role hierarchy Owner > Administrator > Admin, permissions, question editor, activity log, real-time theme switcher, sidebar admin, QR cards, matrix rain, boot sequence.
 
 **Live URL:** `https://devdna-2trh.onrender.com/`  
-**Event:** Tec Toc 2026 • School Tech Showcase Ready  
-**Stack:** HTML, CSS, Vanilla JS (ES Modules), Firebase Firestore, QRCode.js CDN, Canvas API
+**Event:** Tec Toc 2026 • Enterprise-Grade Showcase  
+**Stack:** HTML, CSS, Vanilla JS (ES Modules), Firebase Auth (Google) + Firestore, QRCode.js local, Canvas API, themes.js
 
 ---
 
-## 🆕 What's New in v2 (vs v1)
+## 🚨 OWNER CONFIGURATION REQUIRED (BEFORE GITHUB PUSH)
 
-### 🐞 Critical Bug Fixes
-1. **Download Card Watermark & Icon** — watermark now perfectly centered (`W/2, H/2`) at 12% opacity, not cut off. Icon is `92px`, bright white with double neon glow `shadowBlur 28+16`, visible for all 5 archetypes.
-2. **Quiz Answer Layout** — Desktop `min-width:769px` → `grid-template-columns: 1fr 1fr` (2x2), Mobile → 1 column stacked.
-3. **Toast** — Now `position: fixed; bottom:28px; left:50%; z-index:99999;` floating above leaderboard, fade-in/out, auto-hide 2.5s, neon green glow.
-4. **Share Link** — Fixed to `https://devdna-2trh.onrender.com/` (was `devdna.onrender.com`).
+Open `firebase.js` and replace placeholders:
 
-### ✨ New Features
-- **Feature 1: SFX** — hover click, select beep, complete ding, reveal swoosh. Toggle 🔊/🔇 top-right, persists in localStorage, volume 35%, preloaded.
-- **Feature 2: Typing Animation** — `DevDNA` types at 90ms/char, subtitle `Discover Your Developer Archetype` at 42ms/char with blinking cursor.
-- **Feature 3: Boot Screen** — Every visit ~2.5s, terminal green text typing:
-  ```
-  > Initializing DevDNA...
-  > Loading neural weights...
-  > Connecting to archetype database...
-  > System ready.
-  ```
-  Plus cyberpunk loading bar 0→100% with shimmer.
-- **Feature 4: Best Pair** — Result shows:
-  - Frontend Wizard → Backend Architect — "You design the dream, they build the engine."
-  - Backend Architect → Frontend Wizard — "You build the engine, they design the dream."
-  - Full Stack Ninja → Debugging Detective — "You build fast, they keep it flawless."
-  - Debugging Detective → Full Stack Ninja — "You catch the chaos, they create the code."
-  - AI Explorer → Frontend Wizard — "You bring intelligence, they make it beautiful."
-- **Feature 5: Full Breakdown** — All 5 archetypes with % match sorted high→low, neon animated bars.
-- **Feature 6: Custom Cursor** — Desktop only, crosshair dot + ring, hover scale, trail effect, disabled on touch.
-- **Feature 7: Matrix Rain** — `<canvas id="matrix-canvas">` low opacity 9%, green+purple chars, slow fall, on landing/result/admin/404.
-- **Feature 8: Reveal Sequence** — After last question, overlay:
-  ```
-  > SCANNING NEURAL PATTERNS...
-  > ANALYZING RESPONSES...
-  > DECODING DNA...
-  > COMPLETE.
-  ```
-  Glitch + fade into result with glow-in animation.
-- **Feature 9: Total Users Counter** — Landing below CTA: `⚡ [NUMBER] developers analyzed`, animated count-up 0→total from Firebase `total`.
-- **Feature 10: QR Code on Card** — Bottom-right QR linking to `https://devdna-2trh.onrender.com/` with neon border, plus bottom-left `Generated on 03 Oct 2026`.
-
-### 🔒 Secret Admin Panel
-- **Route:** `https://devdna-2trh.onrender.com/#secret-admin-only`
-- **Password:** `2trh-8D`
-- Wrong → glitch + shake + red `ACCESS DENIED`
-- Correct → `> ACCESS GRANTED. WELCOME, ADMIN.` → dashboard
-
-**Dashboard:**
-1. **Event Control** — Toggle `EVENT STATUS: 🟢 LIVE / 🔴 CLOSED`, START/CLOSE buttons (green/red glow). When CLOSED: public sees 🔒 locked screen with matrix rain.
-2. **Leaderboard Control** — Total submissions, CLEAR ALL (confirm modal), DOWNLOAD JSON.
-3. **Stats** — Glowing cards per archetype counts.
-4. **Announcement Banner** — Input + UPDATE/HIDE, real-time top banner for all users.
-5. **Export** — JSON `{exportedAt, settings, counts}`.
-6. **Logout** — Clears session.
-
-**Firebase Settings Docs:**
+```js
+export const OWNER_CONFIG = {
+    gmail: "OWNER_GMAIL_PLACEHOLDER@gmail.com", // ← Replace with your real Gmail e.g. marcus@gmail.com
+    displayName: "Marcus",
+    password: "OWNER_PASSWORD_PLACEHOLDER", // ← Replace with strong password e.g. 2trh-8D!xK9...
+    role: "owner"
+};
 ```
-/settings/main {
-  eventLive: boolean,
-  announcement: string,
-  announcementVisible: boolean,
-  updatedAt: timestamp
-}
-```
-Also legacy compat:
-`/settings/eventStatus { live: boolean }`
-`/settings/announcement { text, visible }`
 
-Main site listens real-time via `subscribeToSettings()` → instant banner/event updates.
-
-### 🌐 Uptime Ping Page
-- **Route:** `#uptime-ping`
-- Big `DevDNA STATUS: 🟢 ONLINE`, uptime timer `HH:MM:SS` from page load, last checked timestamp, Firestore status, auto-refresh every 30s ping. Used for human status view; Uptime Robot should still ping main URL.
-
-### ❌ 404 Page
-- Any invalid hash (e.g., `#foobar`) → glitchy 404: big `ERROR 404` with glitch animation, subtitle `ACCESS DENIED — RETURN TO BASE`, matrix rain, random hacker lines, RETURN TO DEVDNA button.
+- Owner Gmail = the Google account you will use to sign in first.
+- Owner Password = personal password after Google sign-in (second factor).
+- Owner is auto-created on first load if missing, protected — cannot be removed/demoted EVER, recreates if deleted.
 
 ---
 
-## 📁 Final File Structure
+## ✨ Features Overview
+
+### Core Quiz (preserved from v2.1)
+- Boot screen 2.5s terminal typing, progress 0→100%
+- Typing animation `DevDNA` 90ms/char + subtitle 42ms/char (guarded single execution)
+- 12+ questions loaded from Firebase `/questions/` (seed from hardcoded if empty), cached per quiz session
+- 2x2 grid desktop, 1 column mobile, progress bar glow
+- Result reveal `SCANNING... ANALYZING... DECODING... COMPLETE.` + glow-in
+- Best pair compatibility, full breakdown % sorted, neon bars
+- Download PNG 1080x1350 with centered watermark 12%, bright emoji glow, QR bottom-right linking to `https://devdna-2trh.onrender.com/`, `Generated on DD MMM YYYY`
+- Share copies exact URL `https://devdna-2trh.onrender.com/` + floating toast bottom-center
+- Total counter real Firebase `total` only (0 if empty), animated 0→real
+- Matrix rain 9% opacity, custom cursor desktop, announcement banner fixed top with neon pulse
+- Sound toggle top-right shifts below banner when visible (Option B), volume 0.15, debounce, click-only (no hover spam)
+
+### v3 New: Auth System
+**Route:** `https://devdna-2trh.onrender.com/#secret-admin-only`
+
+**Flow:**
+1. Screen 1 `AUTHORIZATION REQUIRED` → Google Sign-In button (Firebase Auth Google provider)
+2. Google popup → Gmail → check Firestore `admins` collection
+   - ❌ Not in list → `ACCESS DENIED — This Gmail is not authorized.` + auto logout, logs failed attempt
+   - ✅ In list → Screen 2 `IDENTITY CONFIRMED — [Display Name]`
+3. Screen 2 password input (personal password per admin)
+   - ❌ Wrong → glitch+shake red, attempt counter, logs failed
+   - ✅ Correct → `ACCESS GRANTED. WELCOME, [ROLE].` → dashboard
+4. Session persists forever until logout (localStorage + Firebase Auth)
+
+### Role Hierarchy
+- 👑 **OWNER (Marcus)** — hardcoded Gmail, password placeholder, auto-created, cannot be removed/demoted EVER, has ALL permissions ALWAYS, ONLY can promote to ADMINISTRATOR, demote ADMINISTRATOR→ADMIN, remove ADMINISTRATOR, view all passwords, clear entire activity log (even if unchecked)
+- ⚡ **ADMINISTRATOR** — Has ALL permissions automatically, can add/remove/edit regular ADMINs, change permissions, cannot remove/demote OWNER, cannot view OWNER or other ADMINISTRATOR passwords, can clear activity log if permission
+- 🛡️ **ADMIN** — Only permissions explicitly granted
+
+Visual badges gold/purple/blue everywhere.
+
+### Permission System (12 perms)
+Top toggle `⚡ ADMINISTRATOR Grants full access... [TOGGLE]` — when ON all checkboxes auto-checked disabled.
+
+Individual:
+1. `event_control` 🎬 Event Control — Start/close event
+2. `change_banner` 📢 Change Announcement Banner
+3. `clear_submissions` 🗑️ Clear Submissions
+4. `download_data` 💾 Download Leaderboard Data
+5. `edit_questions` ✏️ Edit Questions
+6. `add_questions` ➕ Add Questions
+7. `delete_questions` ❌ Delete Questions
+8. `manage_admins` 👥 Manage Admins (regular only)
+9. `set_permissions` 🔧 Set Permissions
+10. `view_stats` 📊 View Stats
+11. `change_theme` 🎨 Change Site Theme
+12. `clear_activity_log` 🧹 Clear Activity Log
+
+OWNER → all true always (no checkboxes). ADMINISTRATOR → all true locked ON. ADMIN → only checked. UI sections hide if no permission.
+
+### New Admin Dashboard (Sidebar Layout)
+Discord-style sidebar + content, hamburger collapses mobile.
+
+**Sidebar Tabs** (hide if no permission except Dashboard always):
+- 📊 **Dashboard** — overview stats total submissions, most popular archetype, event status, active admins count, quick glowing cards, recent activity last 5
+- ⚙️ **Event** — big toggle LIVE/CLOSED, START/CLOSE buttons, needs `event_control`
+- 📢 **Banner** — input, UPDATE/HIDE, live preview, needs `change_banner`
+- ❓ **Questions** — list expand/collapse, shows text, 4 answers with archetype mapping, Edit/Delete/Add buttons per perms, editor form with question textarea + 4 answer inputs + archetype dropdowns, Save writes to Firebase, future takers only
+- 🏆 **Leaderboard** — total counter, stats big glowing numbers (fixed from v2.1 broken icon), CLEAR ALL with modal if `clear_submissions`, DOWNLOAD JSON if `download_data`
+- 👥 **Admins** — list with role badges, avatars, filter/search, ADD NEW ADMIN modal: Gmail, Display Name, Password + 🎲 Generate Hard, Role dropdown ADMIN/ADMINISTRATOR (only OWNER sees ADMINISTRATOR), if ADMIN permission checkboxes, CREATE. Edit modal: change name, change password (OWNER sees eye toggle 👁️, others ••••••••), toggle Administrator (only OWNER), edit permissions, Remove with confirm, OWNER row locked
+- 📜 **Activity Log** — unlimited Firebase, reverse chronological `[2026-01-15 3:45:22 PM] 👑 Marcus (OWNER) → started the event`, search/filter by admin/action/date/role, CLEAR LOG button if `clear_activity_log` (OWNER always can)
+- 🎨 **Theme** — grid of 6 preset cards: Cyberpunk Neon (default green/purple/blue), Matrix Green (all green), Blood Neon (red/black/white), Ocean Deep (blue/teal/navy), Sunset Wave (orange/pink/purple), Monochrome (white/gray/black). Click applies instantly to all users via `/settings/main/theme`, real-time listener updates CSS vars with 0.5s transition
+
+**Sidebar Footer:** Avatar (Google pic), display name, role badge, Logout button.
+
+**Password Visibility:** OWNER sees every admin's password (except own) with eye toggle; ADMINISTRATOR sees •••••••• no reveal; ADMIN cannot see admin page unless `manage_admins`.
+
+**Logging:** Login/logout, failed attempts (gmail), event start/close, banner update/hide, submissions cleared, questions added/edited/deleted, admin added/removed/edited, permissions changed, theme changed, log cleared — format `timestamp + role emoji + displayName + (ROLE) + action`.
+
+**Banner + Sound Fix Option B:** Sound button stays top-right, when banner visible pushes header + sound button down by banner height via CSS `--banner-height` + JS `top = bannerHeight+12px`, smooth transition, mobile too.
+
+**Questions Migration:** Hardcoded in `script.js` fallback, but on first load if `/questions/` empty → seed with 12 hardcoded. Main quiz loads from Firebase on quiz start, cached for session.
+
+---
+
+## 📁 File Structure v3
 
 ```
 /devdna
-│── index.html          # main + hash routing for #secret-admin-only, #uptime-ping, #404
-│── style.css           # main styles (includes boot, matrix, cursor, grid fix, toast)
-│── admin.css           # admin panel styles (glitch, shake, dashboard)
-│── script.js           # main quiz logic v2 (SFX, typing, boot, matrix, cursor, reveal, QR)
-│── admin.js            # admin panel logic
-│── firebase.js         # Firebase + settings + leaderboard + mock fallback
+│── index.html          # main + hash routing + new sidebar admin HTML
+│── style.css           # main styles with CSS vars --neon-primary etc + theme transitions + banner/sound fix
+│── admin.css           # sidebar layout, toggle switch, theme grid, questions, admins, activity
+│── script.js           # main quiz now loads questions from Firebase, theme listener, click sound global
+│── admin.js            # rewritten: Google Auth, roles, permissions, sidebar tabs, CRUD
+│── firebase.js         # Auth + Firestore: admins, questions, activity_log, theme, owner auto-seed
+│── themes.js           # 🆕 theme presets + applyTheme() with 6 themes
+│── lib/
+│     └── qrcode.min.js # local QR (fixed tracking prevention)
 │── audio/
-│     ├── click.mp3     # soft cyberpunk click (see links below - replace silent placeholder)
-│     ├── select.mp3    # futuristic beep
-│     ├── complete.mp3  # success ding
-│     ├── reveal.mp3    # dramatic swoosh
-│     └── README.txt    # download instructions
-│── assets/
-│     └── .gitkeep
+│     ├── click.mp3
+│     ├── select.mp3
+│     ├── complete.mp3
+│     └── reveal.mp3
+│── assets/.gitkeep
 │── README.md
 ```
 
 ---
 
-## 🎵 Audio Files — Download Instructions (IMPORTANT)
+## 🔥 Complete Firebase Setup
 
-Repo includes silent placeholder wavs to prevent 404. Replace them with real SFX for Tec Toc wow-factor.
+### 1. Create Project
+- Go https://console.firebase.google.com → Add project → Name `devdna` → Disable Google Analytics (optional) → Create
 
-All files are **free, royalty-free, no attribution required** from **Pixabay**:
-
-1. **click.mp3 — soft cyberpunk click**
-   - Recommended: `Interface Click - Light` 
-   - Download page: https://pixabay.com/sound-effects/search/click/  
-   - Direct pick: https://pixabay.com/sound-effects/click-button-140881/ (click → Download MP3)
-   - Put as `audio/click.mp3`
-
-2. **select.mp3 — futuristic beep**
-   - Recommended: `Beep Sound - Electronic`
-   - Download page: https://pixabay.com/sound-effects/search/beep/
-   - Direct pick: https://pixabay.com/sound-effects/beep-sound-8333/
-   - Put as `audio/select.mp3`
-
-3. **complete.mp3 — success ding**
-   - Recommended: `Success Bell / Level Up`
-   - Download page: https://pixabay.com/sound-effects/search/success%20ding/
-   - Direct pick: https://pixabay.com/sound-effects/success-1-6297/
-   - Put as `audio/complete.mp3`
-
-4. **reveal.mp3 — dramatic swoosh**
-   - Recommended: `Swoosh Whoosh`
-   - Download page: https://pixabay.com/sound-effects/search/dramatic%20swoosh/
-   - Direct pick: https://pixabay.com/sound-effects/swoosh-142322/
-   - Put as `audio/reveal.mp3`
-
-**Steps:**
-1. Open each Pixabay link → big green **Download** button → MP3.
-2. Rename to exactly `click.mp3`, `select.mp3`, `complete.mp3`, `reveal.mp3`.
-3. Drop into `/audio/` folder, overwriting placeholders.
-4. Commit & push → Render auto-deploys.
-
-Volume is coded to `0.35` (35%) soft. Toggle state saves in `localStorage['devdna_sound_enabled']`.
-
-> Tip: You can also search Freesound.org: `https://freesound.org/search/?q=cyberpunk+click` — same process.
-
----
-
-## 🔥 Firebase Setup v2
-
-1. Create project https://console.firebase.google.com
-2. Firestore → Create Database → Test Mode → Location `asia-south1` (Mumbai) for Kerala latency.
-3. Project Settings → General → Web app → Copy `firebaseConfig` → paste into `firebase.js`.
-4. **Collections to create** (auto-created on first write if you skip):
-   - `devdna_leaderboard/global` → `{ frontend:0, backend:0, fullstack:0, debugging:0, ai:0, total:0 }`
-   - `settings/main` → `{ eventLive:true, announcement:"🎉 Welcome to Tec Toc 2026!", announcementVisible:false, updatedAt: Date.now() }`
-
-5. **Security Rules** (demo open):
+### 2. Enable Firestore
+- Build → Firestore Database → Create database → Start in **Test mode** → Location `asia-south1` (Mumbai) or nearest → Enable
+- Rules for Tec Toc event (open):
 ```
 rules_version = '2';
 service cloud.firestore {
@@ -172,95 +150,170 @@ service cloud.firestore {
   }
 }
 ```
-Lock down after event with auth if needed.
+Lock down after event.
 
-6. **How to change admin password:** Edit `admin.js` line `const ADMIN_PASSWORD = '2trh-8D';` → replace string. Redeploy.
+### 3. Enable Authentication → Google Provider (STEP-BY-STEP)
+- Build → Authentication → Get started
+- Sign-in method tab → Add new provider → **Google** → Enable toggle
+- Support email: select your Gmail (e.g., owner Gmail)
+- Project public-facing name: `DevDNA`
+- Save
+- Settings tab → Authorized domains → **Add domain** → `devdna-2trh.onrender.com` → Add
+- Also ensure `localhost` is there for local testing (default)
 
----
+### 4. Copy Web SDK Config to `firebase.js`
+- Project Settings → General → Your apps → Web → Add app if none → Nickname `devdna-web` → Register
+- Copy `firebaseConfig` object:
+```js
+const firebaseConfig = {
+  apiKey: "AIza...",
+  authDomain: "your-project.firebaseapp.com",
+  projectId: "your-project",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "..."
+};
+```
+- Paste into `firebase.js` replacing placeholder `YOUR_API_KEY` etc.
 
-## 🚀 Deploy on Render (Static Site)
+### 5. Firestore Collections Auto-Created
+On first site load, code auto-creates:
+- `/settings/main` → `{eventLive:true, announcement:"🎉 Welcome to Tec Toc 2026!", announcementVisible:false, theme:"cyberpunk", updatedAt}`
+- `/devdna_leaderboard/global` → `{frontend:0, backend:0, fullstack:0, debugging:0, ai:0, total:0}`
+- `/admins/{owner_sanitized}` → owner doc from `OWNER_CONFIG` (if not exists)
+- `/questions/` → seeded with 12 hardcoded if empty
+- `/activity_log/` → empty until actions
 
-**No build needed.**
+You can also manually create via Firestore console.
 
-1. Push `/devdna` to GitHub repo root (or keep inside folder and set root dir).
-2. Render Dashboard → New → Static Site → Connect repo.
-3. Settings:
-   - Root Directory: `devdna` (if repo has subfolder) or `.`
-   - Build Command: (empty)
-   - Publish Directory: `.`
-4. Create → Get URL `https://devdna-2trh.onrender.com/` — rename if free.
-5. After each GitHub push, Render auto-deploys in ~40s.
-
----
-
-## 🌐 Custom Domain on Render
-
-1. Buy domain e.g., `devdna.site`
-2. Render → Your Site → Settings → Custom Domains → Add `devdna.site` + `www.devdna.site`
-3. Render shows CNAME target e.g., `devdna-2trh.onrender.com`
-4. Registrar DNS → Add CNAME:
-   - Host `@` → `devdna-2trh.onrender.com`
-   - Host `www` → `devdna-2trh.onrender.com`
-5. Wait TLS provisioning. Update `SITE_URL` constant in `script.js` if you change domain (also QR).
-
----
-
-## 🤖 Uptime Robot Setup
-
-1. https://uptimerobot.com → Free account → Add New Monitor
-   - Type: HTTP(s)
-   - Friendly Name: DevDNA
-   - URL: `https://devdna-2trh.onrender.com/` (important: main URL, not #uptime-ping)
-   - Interval: 5 mins
-2. Optional: Monitor `#uptime-ping` URL as well for human check: `https://devdna-2trh.onrender.com/#uptime-ping`
-3. Enable email alerts.
-4. Render static sites rarely sleep, but this ensures instant wake + status badge.
+### 6. Owner Setup
+- In `firebase.js`, replace `OWNER_GMAIL_PLACEHOLDER@gmail.com` with real owner Gmail (must match Google account you will sign in with)
+- Replace `OWNER_PASSWORD_PLACEHOLDER` with strong personal password (e.g., `Marcus$2026!Secure`)
+- First time owner signs in via Google → second screen enter that password → gets OWNER role
+- Owner cannot be removed/demoted, even if you delete doc in console, it recreates on next load
 
 ---
 
-## 🧪 QA Checklist for Tec Toc Projector
+## 👥 How Role & Permission System Works
 
-- [ ] Boot screen ~2.5s: green terminal lines typing, loading bar 0→100%, fades.
-- [ ] Landing typing: `DevDNA` then subtitle character-by-character + cursor blink.
-- [ ] Sound toggle 🔊 top-right (bottom-right mobile), persists after reload.
-- [ ] Hover any button → soft click (if sound on).
-- [ ] Total counter counts up from 0 to Firebase total (e.g., 556→) with ⚡.
-- [ ] Start Analysis → quiz 2x2 grid on desktop, 1 column mobile, no overflow.
-- [ ] Select answer → beep + 420ms delay → next.
-- [ ] After Q12 → reveal overlay `SCANNING... ANALYZING... DECODING... COMPLETE.` → result glow-in.
-- [ ] Result icon bright neon, aura strong, watermark perfectly centered faint.
-- [ ] Best pair shows correct mapping per spec, breakdown % total 100%, sorted.
-- [ ] Download → PNG includes QR bottom-right (scannable to live URL) + `Generated on DD MMM YYYY` bottom-left + domain.
-- [ ] Share copies exact text with `https://devdna-2trh.onrender.com/` + floating toast bottom-center above all.
-- [ ] Leaderboard live bars, total decoded.
-- [ ] Hash `#secret-admin-only` → login → password `2trh-8D` → dashboard → toggle event live/closed → banner update appears instantly on main page in another tab.
-- [ ] Event CLOSED → new visitors see locked screen `🔒 DevDNA is locked.`
-- [ ] Hash `#uptime-ping` → status page with uptime timer ticking.
-- [ ] Hash `#random-xyz` → 404 glitch page + RETURN button.
-- [ ] Custom cursor crosshair only desktop, trail, hover scale.
-- [ ] Matrix rain subtle 10% everywhere, not laggy.
+### Hierarchy
+```
+👑 OWNER (Marcus) > ⚡ ADMINISTRATOR (Shaurya-tier) > 🛡️ ADMIN (custom)
+```
+
+- OWNER has ALL perms always, sees all passwords with 👁️ toggle, only one who can promote/demote ADMINISTRATOR
+- ADMINISTRATOR has ALL perms automatically (checkboxes locked ON), can manage ADMINs but not OWNER or other ADMINISTRATOR passwords
+- ADMIN only has checked perms, UI hides disallowed tabs
+
+### Adding Admins
+- Go to `#secret-admin-only` → Google Sign-In → Password → Admins tab → ADD NEW ADMIN
+- Gmail must be exact Google account the person will use
+- Display Name, Password (use 🎲 Generate Hard for random 16-char), Role
+- If ADMIN, toggle ADMINISTRATOR ON → full access, OFF → check individual perms
+- CREATE → Firestore doc created → person can now sign in
+
+### Permissions Enforcement
+- Frontend hides tabs via `userCan(permId)` check + `.hidden-perm` class
+- Backend Firestore rules currently open for school event (allow read/write true). For production, add custom claims or check role via Cloud Functions.
 
 ---
 
-## 🔒 Admin Quick Access
+## ❓ Question Editor How-To
 
-- URL: `https://devdna-2trh.onrender.com/#secret-admin-only`
-- Password: `2trh-8D`
-- Change password: in `admin.js` → `ADMIN_PASSWORD`
-- Change announcement: dashboard input → UPDATE BANNER
-- Clear leaderboard: dashboard → CLEAR ALL → confirm.
-- Export: DOWNLOAD LEADERBOARD DATA → JSON file.
+- Questions stored in `/questions/{id}` with `order`, `text`, `options: [{text, archetype}]`
+- Main quiz on Start Analysis calls `getQuestions()` → sorted by `order` → cached as `quizSessionQuestions` for entire session (so admin edits mid-quiz don't affect current player)
+- Admin → Questions tab → Expand question → Edit/Delete
+- Edit: textarea question, 4 rows answer text + dropdown archetype → Save → `updateQuestion()` → next taker gets new version
+- Add: same form, ADD NEW QUESTION → `addQuestion()`
+- Delete: confirmation modal → `deleteQuestion()`
+- All logged in activity log
+
+---
+
+## 🎨 Theme Switcher How-To
+
+- Themes defined in `themes.js` `THEMES` object with colors mapping to CSS vars `--neon-primary`, `--neon-green`, etc.
+- Store selected theme string in `/settings/main/theme`
+- Main site `subscribeToSettings()` listener calls `applyTheme(themeKey)` which sets `document.documentElement.style.setProperty()` + `data-theme` attr + localStorage
+- Smooth 0.5s transition on `body, .glass-panel, .top-bar, .btn` etc.
+- Click theme card in Admin → Theme tab → updates Firebase → all connected clients instantly switch
+
+Presets:
+1. Cyberpunk Neon (default)
+2. Matrix Green
+3. Blood Neon
+4. Ocean Deep
+5. Sunset Wave
+6. Monochrome
+
+---
+
+## 🚀 Deploy on Render
+
+- Push `/devdna` to GitHub repo root (or subfolder)
+- Render Dashboard → New → Static Site → Connect repo
+- Root Directory: `devdna` or `.` → Build Command: empty → Publish Directory: `.`
+- Create → URL `https://devdna-2trh.onrender.com/` → add custom domain if needed
+- After each push, auto-deploy
+
+Add authorized domain `devdna-2trh.onrender.com` in Firebase Auth → Settings → Authorized domains (already done in setup).
+
+---
+
+## 🤖 Uptime Robot
+
+- https://uptimerobot.com → New Monitor → HTTP(s) → Friendly Name DevDNA → URL `https://devdna-2trh.onrender.com/` → Interval 5 mins → Create
+- Optional second monitor for `https://devdna-2trh.onrender.com/#uptime-ping`
+- Keeps Render awake + email alerts
+
+---
+
+## 🔒 Security Notes for Tec Toc
+
+- Passwords stored plain text per spec Option A (school event). For prod, use Firebase Auth custom claims + hash, not Firestore plain.
+- Firestore rules open `allow read, write: if true` for demo convenience. After event, lock down: `allow read: if true; allow write: if request.auth != null && exists(/databases/$(database)/documents/admins/$(request.auth.token.email.replace...))`
+- Owner doc protected client-side + auto-reseed, but Firestore console can still delete manually — code will recreate on next load.
+
+---
+
+## 🧪 QA Checklist for Tec Toc 2026
+
+- Click sound plays on ALL button clicks (Start, answer, Download, Share, admin buttons) no hover spam, volume 15%
+- Google Sign-In popup appears on `#secret-admin-only`
+- Non-authorized Gmail → ACCESS DENIED + auto logout after 3s
+- Authorized Gmail → password screen shows Identity Confirmed
+- Wrong password → glitch+shake red + attempt counter
+- Correct password → dashboard loads with sidebar
+- Sidebar nav works, hamburger collapses mobile
+- Owner sees all passwords with 👁️ toggle, Administrator sees ••••••••
+- Administrator can add/remove ADMINs but not OWNER
+- Cannot demote/remove OWNER (error)
+- Permission checkboxes: ADMINISTRATOR toggle disables individual checkboxes
+- Questions load from Firebase in main quiz (check Network → Firestore)
+- Question edits reflect on next quiz taker (open 2 tabs, edit in admin, start new quiz in other tab → new question appears)
+- Activity log records all actions with timestamp + emoji + name + role
+- Theme switcher applies to all users real-time (open 2 browsers, change theme in admin → main site instantly changes colors with 0.5s transition)
+- Banner + sound button no longer overlap: banner fixed top, sound button shifts below when banner visible, smooth
+- All permissions properly hide/show UI sections
+- QR code on download PNG works in Edge Strict tracking prevention (local lib, not CDN)
+- Total counter real Firebase 0 if cleared
+- Boot typing not doubled
+- Event CLOSED shows locked screen, admin still accessible
+
+---
+
+## 🎵 Audio Files (same as v2.1)
+
+Placeholders silent in repo — replace with real MP3s from Pixabay:
+- click.mp3 → https://pixabay.com/sound-effects/click-button-140881/
+- select.mp3 → https://pixabay.com/sound-effects/beep-sound-8333/
+- complete.mp3 → https://pixabay.com/sound-effects/success-1-6297/
+- reveal.mp3 → https://pixabay.com/sound-effects/swoosh-142322/
 
 ---
 
 ## 📜 License
 
-MIT — Use for Tec Toc, portfolio, startup. Credit appreciated.
+MIT — Use for Tec Toc, portfolio, startup.
 
----
-
-## 🙏 Credits
-
-v1 built as senior frontend piece; v2 massive upgrade for Tec Toc 2026 — boot sequence, matrix rain, SFX, QR cards, admin control center, hash routing, all vanilla.
-
-*Decode. Reveal. Ship.*
+*Enterprise-grade admin, cyberpunk soul — Tec Toc 2026.*
