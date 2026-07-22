@@ -19,6 +19,11 @@
     --neon-pink: #ff00aa;
     --neon-orange: #ff8a00;
 
+    /* Theme system v3 - aliased for theme switcher */
+    --neon-primary: #00ff99;
+    --neon-secondary: #a855f7;
+    --neon-tertiary: #00ccff;
+
     --text-primary: #f8f8ff;
     --text-secondary: #a1a1b5;
     --text-muted: #6b6b80;
@@ -34,6 +39,8 @@
     --shadow-neon-green: 0 0 20px rgba(0, 255, 153, 0.4), 0 0 40px rgba(0, 255, 153, 0.15);
     --shadow-neon-blue: 0 0 20px rgba(0, 204, 255, 0.4), 0 0 40px rgba(0, 204, 255, 0.15);
     --shadow-neon-purple: 0 0 20px rgba(168, 85, 247, 0.4), 0 0 40px rgba(168, 85, 247, 0.15);
+
+    --transition-theme: 0.5s;
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -47,8 +54,14 @@ body {
     position:relative;
     line-height:1.5;
     -webkit-font-smoothing: antialiased;
+    transition: background-color var(--transition-theme) ease, color var(--transition-theme) ease;
 }
 ::selection { background: var(--neon-purple); color:white; }
+
+/* Theme transition for main elements */
+.glass-panel, .top-bar, .btn, .option-card, .result-card, .announcement-banner, .admin-sidebar, .admin-card, .overview-card {
+    transition: background-color var(--transition-theme) ease, border-color var(--transition-theme) ease, box-shadow var(--transition-theme) ease, color var(--transition-theme) ease;
+}
 
 /* Hide default cursor on desktop if custom cursor enabled */
 body.custom-cursor-active { cursor: none; }
@@ -152,7 +165,7 @@ body.custom-cursor-active a, body.custom-cursor-active button { cursor: none; }
 body.has-banner .top-bar { top: var(--banner-height, 42px); }
 body.has-banner .app-container { padding-top: calc(32px + var(--banner-height, 42px)); }
 
-/* Sound Toggle - FIX 5: No overlap with SYSTEM ONLINE */
+/* Sound Toggle - FIX 5 + v3 Option B: Moves below banner when visible */
 .sound-toggle {
     position: fixed;
     top: 12px; right: 16px;
@@ -165,7 +178,7 @@ body.has-banner .app-container { padding-top: calc(32px + var(--banner-height, 4
     display: grid; place-items:center;
     cursor:pointer;
     font-size:16px;
-    transition: all 0.2s ease;
+    transition: all 0.35s cubic-bezier(0.22,1,0.36,1); /* smooth shift when banner appears */
 }
 .sound-toggle:hover { background: rgba(255,255,255,0.12); transform: scale(1.06); }
 
