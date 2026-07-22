@@ -151,6 +151,83 @@ function generateHardPassword(){
 }
 function sanitizeForId(gmail){ return gmail.toLowerCase().replace(/[^a-z0-9]/g,'_'); }
 
+// FIX 6: Modal close helpers - ❌ button, ESC, overlay click
+function closeModalById(id){
+    const modal = document.getElementById(id);
+    if(!modal) return;
+    modal.classList.add('hidden');
+    // Cleanup state
+    if(id==='question-editor-modal') editingQuestionId=null;
+    if(id==='delete-question-modal') deletingQuestionId=null;
+    if(id==='add-admin-modal'){
+        // nothing extra
+    }
+    if(id==='edit-admin-modal') editingAdminGmail=null;
+}
+let modalHandlersInitialized=false;
+function closeAllModals(){
+    document.querySelectorAll('.admin-confirm-modal').forEach(m=>{
+        if(!m.classList.contains('hidden')){
+            m.classList.add('hidden');
+        }
+    });
+    editingQuestionId=null;
+    deletingQuestionId=null;
+    // don't clear editingAdminGmail here? closeAll should clear all
+    if(document.getElementById('edit-admin-modal')?.classList.contains('hidden')){
+        editingAdminGmail=null;
+    }
+}
+function initModalCloseHandlers(){
+    if(modalHandlersInitialized) return;
+    modalHandlersInitialized=true;
+    // ❌ close buttons
+    document.querySelectorAll('.modal-close-btn').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+            playClick();
+            const targetId = btn.dataset.close;
+            if(targetId) closeModalById(targetId);
+            else {
+                const modal = btn.closest('.admin-confirm-modal');
+                if(modal) modal.classList.add('hidden');
+            }
+        });
+    });
+    // Click outside modal (on overlay backdrop) closes it
+    document.querySelectorAll('.admin-confirm-modal').forEach(modal=>{
+        modal.addEventListener('click', (e)=>{
+            if(e.target === modal){
+                playClick();
+                modal.classList.add('hidden');
+                // cleanup
+                if(modal.id==='question-editor-modal') editingQuestionId=null;
+                if(modal.id==='delete-question-modal') deletingQuestionId=null;
+                if(modal.id==='edit-admin-modal') editingAdminGmail=null;
+            }
+        });
+    });
+    // ESC key closes any open modal
+    document.addEventListener('keydown', (e)=>{
+        if(e.key === 'Escape'){
+            const openModals = Array.from(document.querySelectorAll('.admin-confirm-modal')).filter(m=>!m.classList.contains('hidden'));
+            if(openModals.length>0){
+                playClick();
+                openModals.forEach(m=>m.classList.add('hidden'));
+                editingQuestionId=null;
+                deletingQuestionId=null;
+                // keep editingAdminGmail? close all should clear
+                const editModal = document.getElementById('edit-admin-modal');
+                if(editModal && !editModal.classList.contains('hidden')){
+                    // will be hidden above, but also clear
+                } else {
+                    // if edit modal was open, clear gmail
+                    if(openModals.some(m=>m.id==='edit-admin-modal')) editingAdminGmail=null;
+                }
+            }
+        }
+    });
+}
+
 // Activity logger wrapper
 async function logActivity(action, details=''){
     if(!currentAdmin) return;
@@ -958,7 +1035,8 @@ async function openEditAdminModal(gmail){
 
         // Administrator toggle
         const adminToggleRow = document.createElement('div');
-        adminToggleRow.style.cssText='background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(0,204,255,0.1)); border:1px solid rgba(168,85,247,0.3); border-radius:12px; padding:14px; margin:14px 0; display:flex; justify-content:space-between; align-items:center;';
+        adminToggleRow.className='admin-toggle-card';
+        adminToggleRow.style.cssText='margin:14px 0;';
         adminToggleRow.innerHTML=`
             <div><div style="font-family:var(--font-display); font-weight:800; font-size:13px;">⚡ ADMINISTRATOR</div><div class="mono" style="font-size:10px; color:var(--text-secondary);">Grants full access</div></div>
             <label class="toggle-switch"><input id="edit-admin-is-administrator" type="checkbox" ${admin.role==='administrator'?'checked':''}><span class="toggle-slider"></span></label>
@@ -1217,6 +1295,7 @@ async function initAuthFlow(){
 export function openAdminPanel(){
     const sec = document.getElementById('admin-section');
     if(sec){ sec.style.display='flex'; sec.classList.add('active'); }
+    initModalCloseHandlers(); // FIX 6: Ensure close buttons, ESC, overlay work
     initAuthFlow();
 }
 
