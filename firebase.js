@@ -168,13 +168,19 @@ export function sanitizeGmail(gmail) {
 // Keep old internal alias for backward compat if needed
 function sanitizeGmailOld(gmail){ return gmail.toLowerCase().replace(/[^a-z0-9]/g,'_'); }
 
-// Ensure Owner exists (protected, recreates if deleted)
+// Ensure Owner exists (protected, recreates if deleted) — FIX 1: Duplicate Owner Prevention + legacy ID cleanup
 async function ensureOwnerExists(){
+    const currentId = sanitizeGmail(OWNER_CONFIG.gmail);
+    const ownerGmailLower = OWNER_CONFIG.gmail.toLowerCase();
+
     if(!firebaseInitialized) {
-        // mock: ensure owner in local
-        const admins=getFallbackAdmins();
-        const ownerSanitized=sanitizeGmail(OWNER_CONFIG.gmail);
-        if(!admins.find(a=>sanitizeGmail(a.gmail)===ownerSanitized)){
+        // mock: ensure owner in local + clean duplicates
+        let admins = getFallbackAdmins();
+        // Find all owners matching gmail case-insensitive (any ID format)
+        const matchingOwners = admins.filter(a => a.role === 'owner' && a.gmail.toLowerCase() === ownerGmailLower);
+        
+        if(matchingOwners.length === 0){
+            // No owner at all — create
             admins.push({
                 gmail: OWNER_CONFIG.gmail,
                 displayName: OWNER_CONFIG.displayName,
@@ -187,14 +193,48 @@ async function ensureOwnerExists(){
             });
             setFallbackAdmins(admins);
             console.log('[DevDNA] Mock owner seeded');
+        } else if(matchingOwners.length > 1 || !matchingOwners.find(a => sanitizeGmail(a.gmail) === currentId)){
+            // Duplicate owners or legacy ID mismatch — keep only current format
+            const toKeep = matchingOwners.find(a => sanitizeGmail(a.gmail) === currentId) || matchingOwners[0];
+            // If kept is not current format, we will recreate with current ID
+            const filtered = admins.filter(a => {
+                // Keep non-owners always
+                if(a.role !== 'owner') return true;
+                if(a.gmail.toLowerCase() !== ownerGmailLower) return true; // different gmail owner? Keep? Actually should only be one owner gmail, but keep unrelated owners?
+                // For matching gmail owners, keep only the one we want to keep (if its sanitized matches current, keep it, else we'll recreate)
+                return false; // remove all matching gmail owners for now, will re-add correct one
+            });
+            // Add back correct owner with current ID
+            filtered.push({
+                gmail: OWNER_CONFIG.gmail,
+                displayName: toKeep.displayName || OWNER_CONFIG.displayName,
+                password: toKeep.password || OWNER_CONFIG.password,
+                role: 'owner',
+                permissions: {...DEFAULT_PERMISSIONS},
+                avatar: toKeep.avatar || "",
+                createdAt: toKeep.createdAt || Date.now(),
+                addedBy: toKeep.addedBy || "system"
+            });
+            setFallbackAdmins(filtered);
+            console.log('[DevDNA] Mock owner duplicates cleaned, kept only current format:', currentId);
         }
         return;
     }
+
     try{
-        const ownerId=sanitizeGmail(OWNER_CONFIG.gmail);
-        const ref=doc(db,'admins',ownerId);
-        const snap=await getDoc(ref);
-        if(!snap.exists()){
+        const col = collection(db, 'admins');
+        const snaps = await getDocs(col);
+        const allOwnersMatchingGmail = [];
+        snaps.forEach(d=>{
+            const data = d.data();
+            if(data.role === 'owner' && data.gmail && data.gmail.toLowerCase() === ownerGmailLower){
+                allOwnersMatchingGmail.push({id: d.id, data});
+            }
+        });
+
+        if(allOwnersMatchingGmail.length === 0){
+            // No owner found — create
+            const ref = doc(db, 'admins', currentId);
             await setDoc(ref,{
                 gmail: OWNER_CONFIG.gmail,
                 displayName: OWNER_CONFIG.displayName,
@@ -205,7 +245,45 @@ async function ensureOwnerExists(){
                 createdAt: Date.now(),
                 addedBy: "system"
             });
-            console.log('[DevDNA] Owner auto-seeded:', OWNER_CONFIG.gmail);
+            console.log('[DevDNA] Owner auto-seeded:', OWNER_CONFIG.gmail, 'ID:', currentId);
+        } else {
+            // Found 1+ owners with matching gmail (case-insensitive) — check for duplicates / legacy
+            const hasCurrentFormat = allOwnersMatchingGmail.find(o => o.id === currentId);
+            
+            if(allOwnersMatchingGmail.length === 1 && hasCurrentFormat){
+                // Perfect — single owner with correct ID, nothing to do
+                return;
+            }
+
+            // Duplicate or legacy detected — clean up
+            if(hasCurrentFormat){
+                // Keep current format, delete others
+                const toDelete = allOwnersMatchingGmail.filter(o => o.id !== currentId);
+                for(const o of toDelete){
+                    await deleteDoc(doc(db, 'admins', o.id));
+                    console.log('[DevDNA] Deleted duplicate/legacy owner:', o.id, 'gmail:', o.data.gmail);
+                }
+                console.log('[DevDNA] Owner duplicates cleaned, kept:', currentId);
+            } else {
+                // No doc with current format exists, but we have legacy/duplicate owners — delete all and create correct one
+                for(const o of allOwnersMatchingGmail){
+                    await deleteDoc(doc(db, 'admins', o.id));
+                    console.log('[DevDNA] Deleted legacy owner:', o.id);
+                }
+                // Create with current format, preserving first found's meta if available
+                const first = allOwnersMatchingGmail[0]?.data;
+                await setDoc(doc(db, 'admins', currentId),{
+                    gmail: OWNER_CONFIG.gmail,
+                    displayName: first?.displayName || OWNER_CONFIG.displayName,
+                    password: first?.password || OWNER_CONFIG.password,
+                    role: 'owner',
+                    permissions: {...DEFAULT_PERMISSIONS},
+                    avatar: first?.avatar || "",
+                    createdAt: first?.createdAt || Date.now(),
+                    addedBy: first?.addedBy || "system"
+                });
+                console.log('[DevDNA] Owner recreated with current format:', currentId, 'deleted', allOwnersMatchingGmail.length, 'legacy/duplicate(s)');
+            }
         }
     }catch(e){ console.warn('[DevDNA] ensureOwnerExists failed',e); }
 }
