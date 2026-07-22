@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <meta name="theme-color" content="#0a0a0f">
-    <meta name="description" content="DevDNA v2 - Discover your developer archetype. Cyberpunk quiz with live leaderboard.">
-    <title>DevDNA • Discover Your Developer Archetype</title>
+    <meta name="description" content="DevDNA v3 - Discover your developer archetype. Cyberpunk quiz with admin control center.">
+    <title>DevDNA • Tec Toc 2026</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,41 +19,32 @@
     {
         "imports": {
             "firebase/app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
-            "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js",
+            "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"
         }
     }
     </script>
 
-    <!-- QRCode.js for result card - LOCAL (fixed for Brave/Edge/Safari tracking prevention) -->
+    <!-- QRCode.js LOCAL - fixed for Brave/Edge tracking prevention -->
     <script src="lib/qrcode.min.js"></script>
 </head>
 <body>
-    <!-- BOOT SCREEN (shows every visit ~2.5s) -->
+    <!-- BOOT SCREEN -->
     <div id="boot-screen" class="boot-screen">
         <div class="boot-terminal">
             <div id="boot-lines"></div>
             <div class="boot-loader">
-                <div class="boot-progress-track">
-                    <div id="boot-progress-fill" class="boot-progress-fill"></div>
-                </div>
-                <div class="boot-percent">
-                    <span id="boot-status-text" class="mono">INITIALIZING...</span>
-                    <span id="boot-percent-text" class="mono">0%</span>
-                </div>
+                <div class="boot-progress-track"><div id="boot-progress-fill" class="boot-progress-fill"></div></div>
+                <div class="boot-percent"><span id="boot-status-text" class="mono">INITIALIZING...</span><span id="boot-percent-text" class="mono">0%</span></div>
             </div>
         </div>
     </div>
 
-    <!-- REVEAL SEQUENCE (quiz complete drama) -->
-    <div id="reveal-sequence" class="reveal-sequence">
-        <div id="reveal-lines"></div>
-    </div>
+    <!-- REVEAL SEQUENCE -->
+    <div id="reveal-sequence" class="reveal-sequence"><div id="reveal-lines"></div></div>
 
-    <!-- Custom Cursor (desktop only) -->
-    <div id="custom-cursor" class="custom-cursor" aria-hidden="true">
-        <div class="cursor-dot"></div>
-        <div class="cursor-ring"></div>
-    </div>
+    <!-- Custom Cursor -->
+    <div id="custom-cursor" class="custom-cursor" aria-hidden="true"><div class="cursor-dot"></div><div class="cursor-ring"></div></div>
 
     <!-- Background Layers -->
     <div class="bg-gradient"></div>
@@ -62,314 +53,235 @@
     <div class="noise-overlay" aria-hidden="true"></div>
     <div class="grid-overlay" aria-hidden="true"></div>
 
-    <!-- Announcement Banner (controlled by admin) -->
+    <!-- Announcement Banner -->
     <div id="announcement-banner" class="announcement-banner"></div>
 
     <!-- Header -->
     <header class="top-bar">
-        <div class="brand">
-            <span class="brand-icon">🧬</span>
-            <span class="brand-text">DevDNA</span>
-            <span class="brand-version">v2.0 / TEC TOC 2026</span>
-        </div>
+        <div class="brand"><span class="brand-icon">🧬</span><span class="brand-text">DevDNA</span><span class="brand-version">v3.0 / TEC TOC 2026</span></div>
         <div class="top-bar-line"></div>
-        <div class="system-status">
-            <span class="pulse-dot"></span> SYSTEM ONLINE
-        </div>
+        <div class="system-status"><span class="pulse-dot"></span> SYSTEM ONLINE</div>
     </header>
 
-    <!-- Sound Toggle Floating -->
-    <button id="sound-toggle" class="sound-toggle" aria-label="Toggle sound" title="Toggle sound">🔊</button>
+    <!-- Sound Toggle -->
+    <button id="sound-toggle" class="sound-toggle" aria-label="Toggle sound">🔊</button>
 
-    <!-- Hidden QR container for canvas generation -->
     <div id="qr-temp" style="position:absolute; left:-9999px; top:-9999px; width:120px; height:120px;"></div>
 
     <main class="app-container">
-        <!-- LANDING SECTION -->
+        <!-- LANDING -->
         <section id="landing-section" class="section">
             <div class="landing-content">
-                <div class="badge-wrapper">
-                    <span class="neon-badge"><span class="badge-dot"></span> NEURAL SCAN READY // 12 QUESTIONS</span>
-                </div>
-
-                <h1 class="hero-title">
-                    <span id="hero-title-typed" class="title-glitch" data-text="DevDNA"></span><span id="hero-title-cursor" class="typing-cursor"></span>
-                </h1>
-                
+                <div class="badge-wrapper"><span class="neon-badge"><span class="badge-dot"></span> NEURAL SCAN READY // 12+ QUESTIONS</span></div>
+                <h1 class="hero-title"><span id="hero-title-typed" class="title-glitch" data-text="DevDNA"></span><span id="hero-title-cursor" class="typing-cursor"></span></h1>
                 <p class="hero-subtitle"><span id="hero-subtitle-typed"></span><span id="hero-subtitle-cursor" class="typing-cursor" style="display:none;"></span></p>
                 <p class="hero-desc">We decode your coding instincts, design cravings, and debug rituals to reveal the archetype hardwired into your source code.</p>
-
-                <button id="start-btn" class="btn btn-primary btn-glow">
-                    <span class="btn-inner">
-                        <span class="btn-text">Start Analysis</span>
-                        <span class="btn-icon">▶</span>
-                    </span>
-                </button>
-
-                <!-- Feature 9: Total Users Counter -->
-                <div id="total-users-counter" class="total-users-counter">
-                    <span>⚡</span>
-                    <span id="counter-num" class="counter-num">0</span>
-                    <span>developers analyzed</span>
-                </div>
-
-                <div class="archetype-preview">
-                    <div class="preview-label">DETECTED ARCHETYPES IN DATABASE:</div>
-                    <div class="preview-chips">
-                        <span class="chip chip-blue">🎨 Wizard</span>
-                        <span class="chip chip-green">🛠 Architect</span>
-                        <span class="chip chip-purple">⚡ Ninja</span>
-                        <span class="chip chip-orange">🐞 Detective</span>
-                        <span class="chip chip-cyan">🤖 AI Explorer</span>
-                    </div>
-                </div>
+                <button id="start-btn" class="btn btn-primary btn-glow"><span class="btn-inner"><span class="btn-text">Start Analysis</span><span class="btn-icon">▶</span></span></button>
+                <div id="total-users-counter" class="total-users-counter"><span>⚡</span><span id="counter-num" class="counter-num">0</span><span>developers analyzed</span></div>
+                <div class="archetype-preview"><div class="preview-label">DETECTED ARCHETYPES IN DATABASE:</div><div class="preview-chips"><span class="chip chip-blue">🎨 Wizard</span><span class="chip chip-green">🛠 Architect</span><span class="chip chip-purple">⚡ Ninja</span><span class="chip chip-orange">🐞 Detective</span><span class="chip chip-cyan">🤖 AI Explorer</span></div></div>
             </div>
-
-            <div class="landing-decoration">
-                <div class="deco-line"></div>
-                <div class="deco-code">
-                    // initializing dna sequence...<br>
-                    const dev = await decode(you);<br>
-                    console.log(dev.archetype);<br>
-                    <span class="deco-blink">▌</span>
-                </div>
-            </div>
+            <div class="landing-decoration"><div class="deco-line"></div><div class="deco-code">// initializing dna sequence...<br>const dev = await decode(you);<br>console.log(dev.archetype);<br><span class="deco-blink">▌</span></div></div>
         </section>
 
-        <!-- QUIZ SECTION -->
+        <!-- QUIZ -->
         <section id="quiz-section" class="section">
             <div class="quiz-container glass-panel">
-                <div class="progress-header">
-                    <div class="progress-top">
-                        <span id="question-counter" class="mono">QUESTION 01 / 12</span>
-                        <span id="progress-percent" class="mono percent">8%</span>
-                    </div>
-                    <div class="progress-bar-track">
-                        <div id="progress-fill" class="progress-bar-fill"></div>
-                        <div class="progress-bar-glow"></div>
-                    </div>
-                </div>
-
-                <div id="question-wrapper" class="question-wrapper">
-                    <h2 id="question-text" class="question-text">Loading sequence...</h2>
-                    <div id="options-container" class="options-grid"></div>
-                </div>
-
+                <div class="progress-header"><div class="progress-top"><span id="question-counter" class="mono">QUESTION 01 / 12</span><span id="progress-percent" class="mono percent">8%</span></div><div class="progress-bar-track"><div id="progress-fill" class="progress-bar-fill"></div><div class="progress-bar-glow"></div></div></div>
+                <div id="question-wrapper" class="question-wrapper"><h2 id="question-text" class="question-text">Loading sequence...</h2><div id="options-container" class="options-grid"></div></div>
                 <div class="quiz-footer mono">SELECT ONE // NEURAL WEIGHT WILL BE APPLIED</div>
             </div>
         </section>
 
-        <!-- EVENT LOCKED SECTION -->
-        <section id="event-locked-section" class="section">
-            <div class="event-locked glass-panel">
-                <div class="locked-icon">🔒</div>
-                <h2 class="locked-title">DevDNA is locked.</h2>
-                <p class="locked-sub">Event starts soon. Stay tuned. The neural network is recalibrating for Tec Toc 2026.</p>
-                <div style="margin-top:24px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
-                    > Signal encrypted.<br>
-                    > Awaiting admin authorization...<br>
-                    <span style="color:var(--neon-purple)">> Stay in loop @ tec toc</span>
-                </div>
-            </div>
-        </section>
+        <!-- EVENT LOCKED -->
+        <section id="event-locked-section" class="section"><div class="event-locked glass-panel"><div class="locked-icon">🔒</div><h2 class="locked-title">DevDNA is locked.</h2><p class="locked-sub">Event starts soon. Stay tuned. The neural network is recalibrating for Tec Toc 2026.</p><div style="margin-top:24px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">> Signal encrypted.<br>> Awaiting admin authorization...<br><span style="color:var(--neon-purple)">> Stay in loop @ tec toc</span></div></div></section>
 
-        <!-- RESULT SECTION -->
+        <!-- RESULT -->
         <section id="result-section" class="section">
             <div class="result-layout">
-                <div id="result-card" class="result-card glass-panel">
-                    <div class="result-card-inner">
-                        <div class="result-aura" id="result-aura"></div>
-                        <div id="result-icon-wrapper" class="result-icon-wrapper">
-                            <span id="result-icon" class="result-icon">🎨</span>
-                        </div>
-
-                        <div class="result-label mono">ARCHETYPE DECODED</div>
-                        <h2 id="result-name" class="result-name">Frontend Wizard</h2>
-                        <div id="result-underline" class="result-underline"></div>
-                        <p id="result-description" class="result-description">You craft pixel-perfect realities...</p>
-
-                        <div id="result-traits" class="result-traits"></div>
-
-                        <!-- Feature 4: Best Pair -->
-                        <div id="best-pair" class="best-pair">
-                            <div class="best-pair-label mono">⚡ YOUR BEST PAIR</div>
-                            <div id="best-pair-name" class="best-pair-name">Backend Architect</div>
-                            <div id="best-pair-reason" class="best-pair-reason">"You design the dream, they build the engine."</div>
-                        </div>
-
-                        <!-- Feature 5: Full Breakdown -->
-                        <div id="full-breakdown" class="full-breakdown">
-                            <div class="breakdown-title mono">YOUR FULL DEV-DNA BREAKDOWN</div>
-                            <div id="breakdown-list"></div>
-                        </div>
-
-                        <div class="card-footer-branding mono">
-                            <span>DevDNA</span><span>•</span><span id="result-id">ID: FW-3849-X</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="result-actions">
-                    <button id="download-btn" class="btn btn-primary">
-                        <span class="btn-inner"><span>📥</span> Download Result Card</span>
-                    </button>
-                    <button id="share-btn" class="btn btn-secondary">
-                        <span class="btn-inner"><span>📤</span> Share Result</span>
-                    </button>
-                </div>
-
-                <div class="leaderboard glass-panel">
-                    <div class="leaderboard-header">
-                        <h3 class="leaderboard-title"><span class="icon">📊</span> Global DevDNA Stats</h3>
-                        <p class="leaderboard-sub mono">LIVE SYNC // UPDATING IN REAL-TIME VIA FIRESTORE</p>
-                    </div>
-                    <div id="leaderboard-list" class="leaderboard-list">
-                        <div class="leaderboard-loading mono">Syncing with neural network...</div>
-                    </div>
-                    <div id="firebase-status" class="firebase-status mono">● CONNECTING TO DATABASE...</div>
-                    <div class="total-count mono" id="total-count"></div>
-                </div>
+                <div id="result-card" class="result-card glass-panel"><div class="result-card-inner"><div class="result-aura" id="result-aura"></div><div id="result-icon-wrapper" class="result-icon-wrapper"><span id="result-icon" class="result-icon">🎨</span></div><div class="result-label mono">ARCHETYPE DECODED</div><h2 id="result-name" class="result-name">Frontend Wizard</h2><div id="result-underline" class="result-underline"></div><p id="result-description" class="result-description">You craft pixel-perfect realities...</p><div id="result-traits" class="result-traits"></div><div id="best-pair" class="best-pair"><div class="best-pair-label mono">⚡ YOUR BEST PAIR</div><div id="best-pair-name" class="best-pair-name">Backend Architect</div><div id="best-pair-reason" class="best-pair-reason">"You design the dream, they build the engine."</div></div><div id="full-breakdown" class="full-breakdown"><div class="breakdown-title mono">YOUR FULL DEV-DNA BREAKDOWN</div><div id="breakdown-list"></div></div><div class="card-footer-branding mono"><span>DevDNA</span><span>•</span><span id="result-id">ID: FW-3849-X</span></div></div></div>
+                <div class="result-actions"><button id="download-btn" class="btn btn-primary"><span class="btn-inner"><span>📥</span> Download Result Card</span></button><button id="share-btn" class="btn btn-secondary"><span class="btn-inner"><span>📤</span> Share Result</span></button></div>
+                <div class="leaderboard glass-panel"><div class="leaderboard-header"><h3 class="leaderboard-title"><span class="icon">📊</span> Global DevDNA Stats</h3><p class="leaderboard-sub mono">LIVE SYNC // UPDATING IN REAL-TIME VIA FIRESTORE</p></div><div id="leaderboard-list" class="leaderboard-list"><div class="leaderboard-loading mono">Syncing with neural network...</div></div><div id="firebase-status" class="firebase-status mono">● CONNECTING TO DATABASE...</div><div class="total-count mono" id="total-count"></div></div>
             </div>
         </section>
 
-        <!-- ADMIN SECTION -->
+        <!-- ADMIN SECTION v3 - Sidebar Layout + Google Auth -->
         <section id="admin-section" class="section admin-section">
-            <!-- Login -->
-            <div id="admin-login" class="admin-login glass-panel">
+            <!-- Step 1: Google Sign-In -->
+            <div id="admin-auth-google" class="admin-auth-screen glass-panel">
                 <div class="admin-label">AUTHORIZATION REQUIRED</div>
                 <h2 class="admin-title">Admin Access</h2>
-                <p class="admin-sub">Enter access code to continue. Session logs are monitored.</p>
-                <div class="admin-input-wrap">
-                    <input id="admin-password" class="admin-input" type="password" placeholder="Enter access code..." autocomplete="off" spellcheck="false">
+                <p class="admin-sub">Sign in with your authorized Gmail. Session persists until logout.</p>
+                <div style="margin: 24px 0;">
+                    <button id="google-signin-btn" class="btn btn-primary" style="width:100%; padding:14px;">
+                        <span class="btn-inner" style="justify-content:center;"><span style="font-size:18px;">🔐</span> Sign in with Google</span>
+                    </button>
                 </div>
-                <button id="admin-auth-btn" class="btn btn-primary admin-btn">AUTHENTICATE</button>
-                <div id="admin-error" class="admin-error mono"></div>
-                <div id="admin-terminal-log" class="admin-terminal-log mono"></div>
-            </div>
-
-            <!-- Dashboard -->
-            <div id="admin-dashboard" class="admin-dashboard hidden">
-                <div class="admin-header glass-panel">
-                    <div class="admin-header-title">🧬 DevDNA Control Center</div>
-                    <button id="admin-logout" class="btn-admin-blue">LOGOUT</button>
-                </div>
-
-                <div class="admin-grid">
-                    <!-- Event Control -->
-                    <div class="admin-card glass-panel half">
-                        <div class="admin-card-header">
-                            <div class="admin-card-title">EVENT CONTROL</div>
-                            <div id="event-badge" class="admin-status-badge badge-live">🟢 LIVE</div>
-                        </div>
-                        <div class="admin-actions">
-                            <button id="admin-start-event" class="btn-admin-green">START EVENT</button>
-                            <button id="admin-close-event" class="btn-admin-red">CLOSE EVENT</button>
-                        </div>
-                        <div style="margin-top:12px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
-                            When CLOSED, users see locked screen. Admin still works via #secret-admin-only
-                        </div>
-                    </div>
-
-                    <!-- Leaderboard Control -->
-                    <div class="admin-card glass-panel half">
-                        <div class="admin-card-header">
-                            <div class="admin-card-title">LEADERBOARD CONTROL</div>
-                            <div class="mono" style="font-size:11px; color:var(--text-muted);">Total: <span id="admin-total-subs" style="color:white; font-weight:700;">0</span></div>
-                        </div>
-                        <div class="admin-actions">
-                            <button id="admin-clear-data" class="btn-admin-red">CLEAR ALL SUBMISSIONS</button>
-                            <button id="admin-export-data" class="btn-admin-blue">DOWNLOAD LEADERBOARD DATA (JSON)</button>
-                        </div>
-                    </div>
-
-                    <!-- Stats -->
-                    <div class="admin-card glass-panel">
-                        <div class="admin-card-header">
-                            <div class="admin-card-title">STATS PER ARCHETYPE</div>
-                        </div>
-                        <div id="admin-stats-grid" class="admin-stats-grid"></div>
-                    </div>
-
-                    <!-- Announcement -->
-                    <div class="admin-card glass-panel">
-                        <div class="admin-card-header">
-                            <div class="admin-card-title">ANNOUNCEMENT BANNER</div>
-                        </div>
-                        <input id="admin-announcement-input" class="admin-input-sm" type="text" placeholder="Enter announcement message... e.g. 🎉 Welcome to Tec Toc 2026!">
-                        <div class="admin-actions">
-                            <button id="admin-update-banner" class="btn-admin-green">UPDATE BANNER</button>
-                            <button id="admin-hide-banner" class="btn-admin-blue">HIDE BANNER</button>
-                        </div>
-                        <div style="margin-top:10px; font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">
-                            Banner appears on top of main site instantly via Firestore real-time.
-                        </div>
-                    </div>
+                <div id="admin-auth-error" class="admin-error mono"></div>
+                <div class="admin-terminal-log mono" style="margin-top:16px; font-size:11px; color:var(--text-muted); text-align:center;">
+                    > Checking Firebase Auth...<br>
+                    > Authorized domain: devdna-2trh.onrender.com<br>
+                    > Only pre-approved Gmails allowed
                 </div>
             </div>
+
+            <!-- Step 2: Password -->
+            <div id="admin-auth-password" class="admin-auth-screen glass-panel hidden">
+                <div class="admin-label">IDENTITY CONFIRMED</div>
+                <h2 id="auth-identity-name" class="admin-title">Welcome, Marcus</h2>
+                <p id="auth-identity-gmail" class="admin-sub">marcus@gmail.com • Enter personal password</p>
+                <div class="admin-input-wrap" style="margin-top:18px;">
+                    <input id="admin-password-input" class="admin-input" type="password" placeholder="Enter personal password..." autocomplete="off">
+                </div>
+                <button id="admin-password-btn" class="btn btn-primary admin-btn" style="width:100%;">AUTHENTICATE</button>
+                <div id="admin-password-error" class="admin-error mono"></div>
+                <div id="admin-attempt-counter" class="mono" style="margin-top:10px; font-size:11px; color:var(--text-muted);"></div>
+                <div style="margin-top:16px; text-align:center;"><button id="admin-back-to-google" class="btn-admin-blue" style="font-size:11px;">← Back to Google Sign-In</button></div>
+                <div id="admin-password-terminal" class="admin-terminal-log mono"></div>
+            </div>
+
+            <!-- Dashboard Sidebar Layout -->
+            <div id="admin-dashboard" class="admin-dashboard-layout hidden">
+                <!-- Mobile hamburger -->
+                <button id="sidebar-toggle" class="sidebar-toggle">☰</button>
+
+                <aside id="admin-sidebar" class="admin-sidebar glass-panel">
+                    <div class="sidebar-header">
+                        <div class="sidebar-brand"><span class="brand-icon">🧬</span><div><div class="sidebar-brand-title">DevDNA</div><div class="sidebar-brand-sub">Admin Panel v3</div></div></div>
+                    </div>
+
+                    <nav class="sidebar-nav">
+                        <button data-tab="dashboard" class="sidebar-tab active"><span class="tab-icon">📊</span><span class="tab-text">Dashboard</span></button>
+                        <button data-tab="event" class="sidebar-tab" data-perm="event_control"><span class="tab-icon">⚙️</span><span class="tab-text">Event</span></button>
+                        <button data-tab="banner" class="sidebar-tab" data-perm="change_banner"><span class="tab-icon">📢</span><span class="tab-text">Banner</span></button>
+                        <button data-tab="questions" class="sidebar-tab" data-perm="edit_questions"><span class="tab-icon">❓</span><span class="tab-text">Questions</span></button>
+                        <button data-tab="leaderboard" class="sidebar-tab" data-perm="view_stats"><span class="tab-icon">🏆</span><span class="tab-text">Leaderboard</span></button>
+                        <button data-tab="admins" class="sidebar-tab" data-perm="manage_admins"><span class="tab-icon">👥</span><span class="tab-text">Admins</span></button>
+                        <button data-tab="activity" class="sidebar-tab" data-perm="view_stats"><span class="tab-icon">📜</span><span class="tab-text">Activity</span></button>
+                        <button data-tab="theme" class="sidebar-tab" data-perm="change_theme"><span class="tab-icon">🎨</span><span class="tab-text">Theme</span></button>
+                    </nav>
+
+                    <div class="sidebar-footer">
+                        <div class="sidebar-user">
+                            <img id="sidebar-avatar" class="sidebar-avatar" src="" alt="">
+                            <div class="sidebar-user-info">
+                                <div id="sidebar-name" class="sidebar-name">Marcus 👑</div>
+                                <div id="sidebar-role" class="sidebar-role">OWNER</div>
+                            </div>
+                        </div>
+                        <button id="admin-logout" class="sidebar-logout">🚪 Logout</button>
+                    </div>
+                </aside>
+
+                <main class="admin-content">
+                    <!-- DASHBOARD TAB -->
+                    <div id="tab-dashboard" class="admin-tab-content active">
+                        <div class="tab-header"><h2>📊 Dashboard Overview</h2><p class="mono">Real-time system status • Tec Toc 2026</p></div>
+                        <div class="overview-grid">
+                            <div class="overview-card glass-panel"><div class="overview-label">Total Submissions</div><div id="overview-total" class="overview-num" style="color:var(--neon-green)">0</div></div>
+                            <div class="overview-card glass-panel"><div class="overview-label">Most Popular</div><div id="overview-popular" class="overview-num" style="color:var(--neon-purple)">—</div></div>
+                            <div class="overview-card glass-panel"><div class="overview-label">Event Status</div><div id="overview-event" class="overview-num" style="color:var(--neon-blue)">LIVE</div></div>
+                            <div class="overview-card glass-panel"><div class="overview-label">Active Admins</div><div id="overview-admins" class="overview-num" style="color:var(--neon-orange)">0</div></div>
+                        </div>
+                        <div class="admin-grid" style="margin-top:16px;">
+                            <div class="admin-card glass-panel"><div class="admin-card-header"><div class="admin-card-title">Recent Activity (Last 5)</div></div><div id="dashboard-recent-activity" class="activity-list-compact"></div></div>
+                            <div class="admin-card glass-panel"><div class="admin-card-header"><div class="admin-card-title">Stats Per Archetype</div></div><div id="dashboard-stats-grid" class="admin-stats-grid"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- EVENT TAB -->
+                    <div id="tab-event" class="admin-tab-content">
+                        <div class="tab-header"><h2>⚙️ Event Control</h2><p class="mono">Lock/unlock quiz for all visitors</p></div>
+                        <div class="admin-card glass-panel"><div class="admin-card-header"><div class="admin-card-title">EVENT STATUS</div><div id="event-badge" class="admin-status-badge badge-live">🟢 LIVE</div></div><div class="admin-actions"><button id="admin-start-event" class="btn-admin-green">START EVENT</button><button id="admin-close-event" class="btn-admin-red">CLOSE EVENT</button></div><div class="mono" style="margin-top:12px; font-size:11px; color:var(--text-muted);">When CLOSED, users see 🔒 locked screen. Admin still works via #secret-admin-only.</div></div>
+                    </div>
+
+                    <!-- BANNER TAB -->
+                    <div id="tab-banner" class="admin-tab-content">
+                        <div class="tab-header"><h2>📢 Announcement Banner</h2><p class="mono">Real-time banner for all visitors</p></div>
+                        <div class="admin-card glass-panel"><div class="admin-card-header"><div class="admin-card-title">Banner Message</div></div><input id="admin-announcement-input" class="admin-input-sm" type="text" placeholder="e.g. 🎉 Welcome to Tec Toc 2026!"><div class="admin-actions"><button id="admin-update-banner" class="btn-admin-green">UPDATE BANNER</button><button id="admin-hide-banner" class="btn-admin-blue">HIDE BANNER</button></div><div style="margin-top:16px;"><div class="mono" style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">LIVE PREVIEW:</div><div id="banner-preview" class="announcement-banner show" style="position:relative; top:auto; display:block;">🎉 Welcome to Tec Toc 2026!</div></div></div>
+                    </div>
+
+                    <!-- QUESTIONS TAB -->
+                    <div id="tab-questions" class="admin-tab-content">
+                        <div class="tab-header"><div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;"><div><h2>❓ Question Editor</h2><p class="mono">Edit quiz in real-time • Future takers only</p></div><button id="add-question-btn" class="btn-admin-green" data-perm="add_questions">➕ ADD NEW QUESTION</button></div></div>
+                        <div id="questions-list" class="questions-list"></div>
+                        <!-- Add/Edit Question Modal -->
+                        <div id="question-editor-modal" class="admin-confirm-modal hidden"><div class="admin-confirm-box glass-panel" style="max-width:560px; text-align:left;"><h4 id="question-editor-title">Edit Question</h4><div style="margin:16px 0;"><label class="mono" style="font-size:11px;">Question Text</label><textarea id="qe-text" class="admin-input-sm" rows="3" placeholder="Question text..."></textarea><div id="qe-options" style="margin-top:12px;"></div></div><div style="display:flex; gap:10px; justify-content:flex-end;"><button id="qe-cancel" class="btn-admin-blue">CANCEL</button><button id="qe-save" class="btn-admin-green">SAVE QUESTION</button></div></div></div>
+                    </div>
+
+                    <!-- LEADERBOARD TAB -->
+                    <div id="tab-leaderboard" class="admin-tab-content">
+                        <div class="tab-header"><h2>🏆 Leaderboard Control</h2><p class="mono">Stats & data management</p></div>
+                        <div class="admin-grid">
+                            <div class="admin-card glass-panel half"><div class="admin-card-header"><div class="admin-card-title">TOTAL</div><div class="mono" style="font-size:11px;">Total: <span id="admin-total-subs" style="color:white; font-weight:700;">0</span></div></div><div class="admin-actions"><button id="admin-clear-data" class="btn-admin-red" data-perm="clear_submissions">🗑️ CLEAR ALL SUBMISSIONS</button><button id="admin-export-data" class="btn-admin-blue" data-perm="download_data">💾 DOWNLOAD JSON</button></div></div>
+                            <div class="admin-card glass-panel half"><div class="admin-card-header"><div class="admin-card-title">STATS PER ARCHETYPE</div></div><div id="admin-stats-grid" class="admin-stats-grid"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- ADMINS TAB -->
+                    <div id="tab-admins" class="admin-tab-content">
+                        <div class="tab-header"><div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;"><div><h2>👥 Admin Management</h2><p class="mono">Role hierarchy: Owner > Administrator > Admin</p></div><button id="add-admin-btn" class="btn-admin-green" data-perm="manage_admins">➕ ADD NEW ADMIN</button></div></div>
+                        <div style="margin-bottom:12px; display:flex; gap:8px;"><input id="admin-search" class="admin-input-sm" placeholder="Filter by Gmail or name..." style="max-width:300px; margin-bottom:0;"></div>
+                        <div id="admins-list" class="admins-list"></div>
+
+                        <!-- Add Admin Modal -->
+                        <div id="add-admin-modal" class="admin-confirm-modal hidden"><div class="admin-confirm-box glass-panel" style="max-width:560px; text-align:left; max-height:90vh; overflow-y:auto;"><h4>➕ Add New Admin</h4>
+                            <div style="margin:14px 0;">
+                                <label class="mono" style="font-size:11px;">Gmail (required)</label><input id="new-admin-gmail" class="admin-input-sm" type="email" placeholder="user@gmail.com">
+                                <label class="mono" style="font-size:11px;">Display Name (required)</label><input id="new-admin-name" class="admin-input-sm" type="text" placeholder="e.g. Shaurya">
+                                <label class="mono" style="font-size:11px;">Password (required) <button id="generate-password-btn" type="button" style="margin-left:8px; font-size:10px; padding:2px 8px; border-radius:6px; border:1px solid var(--border-glass); background:rgba(255,255,255,0.06); color:white; cursor:pointer;">🎲 Generate Hard</button></label><input id="new-admin-password" class="admin-input-sm" type="text" placeholder="Hard password...">
+                                <label class="mono" style="font-size:11px;">Role</label><select id="new-admin-role" class="admin-input-sm"><option value="admin">🛡️ ADMIN (Custom perms)</option><option value="administrator">⚡ ADMINISTRATOR (Full access)</option></select>
+                                <div id="admin-permissions-panel" style="margin-top:16px; border:1px solid var(--border-glass); border-radius:12px; padding:14px; background:rgba(0,0,0,0.2);">
+                                    <div style="background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(0,204,255,0.1)); border:1px solid rgba(168,85,247,0.3); border-radius:12px; padding:14px; margin-bottom:14px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center;"><div><div style="font-family:var(--font-display); font-weight:800; font-size:14px;">⚡ ADMINISTRATOR</div><div class="mono" style="font-size:10px; color:var(--text-secondary); margin-top:4px; line-height:1.4;">Grants full access to everything.<br>This admin can manage other admins,<br>edit questions, control events, and perform all actions — except removing the OWNER.</div></div><label class="toggle-switch"><input id="new-admin-is-administrator" type="checkbox"><span class="toggle-slider"></span></label></div>
+                                    </div>
+                                    <div class="mono" style="font-size:11px; letter-spacing:0.12em; margin-bottom:10px;">INDIVIDUAL PERMISSIONS:</div>
+                                    <div id="permissions-checkboxes" style="display:grid; gap:8px;"></div>
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:16px;"><button id="add-admin-cancel" class="btn-admin-blue">CANCEL</button><button id="add-admin-create" class="btn-admin-green">CREATE ADMIN</button></div>
+                        </div></div>
+
+                        <!-- Edit Admin Modal -->
+                        <div id="edit-admin-modal" class="admin-confirm-modal hidden"><div class="admin-confirm-box glass-panel" style="max-width:560px; text-align:left; max-height:90vh; overflow-y:auto;"><h4 id="edit-admin-title">Edit Admin</h4><div id="edit-admin-content" style="margin:14px 0;"></div><div style="display:flex; gap:10px; justify-content:space-between; margin-top:16px;"><button id="edit-admin-remove" class="btn-admin-red">REMOVE ADMIN</button><div style="display:flex; gap:8px;"><button id="edit-admin-cancel" class="btn-admin-blue">CANCEL</button><button id="edit-admin-save" class="btn-admin-green">SAVE CHANGES</button></div></div></div></div>
+                    </div>
+
+                    <!-- ACTIVITY TAB -->
+                    <div id="tab-activity" class="admin-tab-content">
+                        <div class="tab-header"><div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;"><div><h2>📜 Activity Log</h2><p class="mono">Unlimited history • Newest first</p></div><button id="clear-activity-btn" class="btn-admin-red" data-perm="clear_activity_log">🧹 CLEAR LOG</button></div></div>
+                        <div style="margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap;"><input id="activity-search" class="admin-input-sm" placeholder="Search by name, action, gmail..." style="max-width:320px; margin-bottom:0;"><select id="activity-filter-role" class="admin-input-sm" style="max-width:160px; margin-bottom:0;"><option value="">All Roles</option><option value="owner">Owner</option><option value="administrator">Administrator</option><option value="admin">Admin</option></select></div>
+                        <div id="activity-list" class="activity-list"></div>
+                    </div>
+
+                    <!-- THEME TAB -->
+                    <div id="tab-theme" class="admin-tab-content">
+                        <div class="tab-header"><h2>🎨 Theme Switcher</h2><p class="mono">Instant global theme for all users • Real-time sync</p></div>
+                        <div id="theme-grid" class="theme-grid"></div>
+                    </div>
+
+                </main>
+            </div>
+
+            <!-- Confirm Modals -->
+            <div id="admin-confirm-modal" class="admin-confirm-modal hidden"><div class="admin-confirm-box glass-panel"><h4>⚠️ Are you sure?</h4><p>This will reset all archetype counts to zero. This cannot be undone.</p><div style="display:flex; gap:12px; justify-content:center;"><button id="admin-confirm-no" class="btn-admin-blue">CANCEL</button><button id="admin-confirm-yes" class="btn-admin-red">YES, CLEAR ALL</button></div></div></div>
+            <div id="clear-log-modal" class="admin-confirm-modal hidden"><div class="admin-confirm-box glass-panel"><h4>🧹 Clear Activity Log?</h4><p>This will wipe entire activity history. Cannot be undone. Only OWNER can do this if others lack permission, but OWNER always can.</p><div style="display:flex; gap:12px; justify-content:center;"><button id="clear-log-no" class="btn-admin-blue">CANCEL</button><button id="clear-log-yes" class="btn-admin-red">YES, CLEAR LOG</button></div></div></div>
+            <div id="delete-question-modal" class="admin-confirm-modal hidden"><div class="admin-confirm-box glass-panel"><h4>❌ Delete Question?</h4><p>This will permanently remove the question. Cannot be undone.</p><div style="display:flex; gap:12px; justify-content:center;"><button id="delete-q-no" class="btn-admin-blue">CANCEL</button><button id="delete-q-yes" class="btn-admin-red">YES, DELETE</button></div></div></div>
         </section>
 
-        <!-- UPTIME PING SECTION -->
-        <section id="uptime-section" class="section uptime-section">
-            <div class="glass-panel" style="padding:28px; border-radius:20px;">
-                <div class="uptime-badge"><span class="pulse-dot"></span> SYSTEM OPERATIONAL</div>
-                <h2 class="uptime-title">DevDNA STATUS: 🟢 ONLINE</h2>
-                <div class="uptime-grid">
-                    <div class="uptime-item"><span>Uptime:</span><strong id="uptime-duration">00:00:00</strong></div>
-                    <div class="uptime-item"><span>Last checked:</span><strong id="uptime-lastchecked">—</strong></div>
-                    <div class="uptime-item"><span>Server:</span><strong>Render • devdna-2trh.onrender.com</strong></div>
-                    <div class="uptime-item"><span>Firestore:</span><strong id="uptime-firestore">Checking...</strong></div>
-                </div>
-                <div style="margin-top:18px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); line-height:1.6;">
-                    System operational. Auto-refreshing every 30s to keep instance warm for Uptime Robot.<br>
-                    Pinging Firebase + keeping alive.
-                </div>
-            </div>
-        </section>
+        <!-- UPTIME -->
+        <section id="uptime-section" class="section uptime-section"><div class="glass-panel" style="padding:28px; border-radius:20px;"><div class="uptime-badge"><span class="pulse-dot"></span> SYSTEM OPERATIONAL</div><h2 class="uptime-title">DevDNA STATUS: 🟢 ONLINE</h2><div class="uptime-grid"><div class="uptime-item"><span>Uptime:</span><strong id="uptime-duration">00:00:00</strong></div><div class="uptime-item"><span>Last checked:</span><strong id="uptime-lastchecked">—</strong></div><div class="uptime-item"><span>Server:</span><strong>Render • devdna-2trh.onrender.com</strong></div><div class="uptime-item"><span>Firestore:</span><strong id="uptime-firestore">Checking...</strong></div></div><div style="margin-top:18px; font-family:var(--font-mono); font-size:11px; color:var(--text-muted); line-height:1.6;">System operational. Auto-refreshing every 30s to keep instance warm for Uptime Robot.<br>Pinging Firebase + keeping alive.</div></div></section>
 
-        <!-- 404 SECTION -->
-        <section id="notfound-section" class="section notfound-section">
-            <div class="glass-panel" style="padding:36px 26px; border-radius:20px;">
-                <div class="error-code glitch">ERROR 404</div>
-                <div class="error-sub">ACCESS DENIED — RETURN TO BASE</div>
-                <div class="error-lines">
-                    > Signal lost.<br>
-                    > Coordinates: NULL<br>
-                    > Tracing route...<br>
-                    > Hash not recognized: <span id="notfound-hash" style="color:var(--neon-orange)">#unknown</span><br>
-                    > Reconnecting...
-                </div>
-                <button id="notfound-return" class="btn btn-primary btn-glow"><span class="btn-inner">RETURN TO DEVDNA</span></button>
-            </div>
-        </section>
-
+        <!-- 404 -->
+        <section id="notfound-section" class="section notfound-section"><div class="glass-panel" style="padding:36px 26px; border-radius:20px;"><div class="error-code glitch">ERROR 404</div><div class="error-sub">ACCESS DENIED — RETURN TO BASE</div><div class="error-lines">> Signal lost.<br>> Coordinates: NULL<br>> Tracing route...<br>> Hash not recognized: <span id="notfound-hash" style="color:var(--neon-orange)">#unknown</span><br>> Reconnecting...</div><button id="notfound-return" class="btn btn-primary btn-glow"><span class="btn-inner">RETURN TO DEVDNA</span></button></div></section>
     </main>
 
-    <footer class="app-footer mono">
-        <span>DevDNA v2 • Tec Toc 2026 • No cookies. No tracking. Just code.</span>
-        <span class="footer-sep">|</span>
-        <span>devdna-2trh.onrender.com</span>
-    </footer>
+    <footer class="app-footer mono"><span>DevDNA v3 • Tec Toc 2026 • No cookies. No tracking. Just code.</span><span class="footer-sep">|</span><span>devdna-2trh.onrender.com</span></footer>
 
-    <!-- Floating Toast (Fix 3) -->
     <div id="copy-toast" class="toast hidden mono">✓ Copied to clipboard!</div>
-
-    <!-- Confirm Modal for Admin -->
-    <div id="admin-confirm-modal" class="admin-confirm-modal hidden">
-        <div class="admin-confirm-box glass-panel">
-            <h4>⚠️ Are you sure?</h4>
-            <p>This will reset all archetype counts to zero. This cannot be undone.</p>
-            <div style="display:flex; gap:12px; justify-content:center;">
-                <button id="admin-confirm-no" class="btn-admin-blue">CANCEL</button>
-                <button id="admin-confirm-yes" class="btn-admin-red">YES, CLEAR ALL</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Hidden canvas for download -->
     <canvas id="export-canvas" width="1080" height="1350" style="display:none;"></canvas>
 
-    <!-- App Scripts -->
+    <!-- Scripts -->
     <script type="module" src="firebase.js"></script>
+    <script type="module" src="themes.js"></script>
     <script type="module" src="admin.js"></script>
     <script type="module" src="script.js"></script>
 </body>
