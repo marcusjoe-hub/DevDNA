@@ -160,7 +160,13 @@ if(isConfigured){
 }
 
 // Helpers
-function sanitizeGmail(gmail){ return gmail.toLowerCase().replace(/[^a-z0-9]/g,'_'); }
+// FIX: Required export - Firestore-safe ID: @ -> _at_, . -> _dot_, lowercase
+// Example: Marcus@Gmail.com → marcus_at_gmail_dot_com
+export function sanitizeGmail(gmail) {
+    return gmail.toLowerCase().replace(/@/g, '_at_').replace(/\./g, '_dot_');
+}
+// Keep old internal alias for backward compat if needed
+function sanitizeGmailOld(gmail){ return gmail.toLowerCase().replace(/[^a-z0-9]/g,'_'); }
 
 // Ensure Owner exists (protected, recreates if deleted)
 async function ensureOwnerExists(){
