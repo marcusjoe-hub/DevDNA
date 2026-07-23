@@ -436,6 +436,20 @@ function initDashboard(){
         }
     });
 
+    // Heartbeat every 30s to update lastSeen for active admin counting (Bug 3)
+    try{
+        const { updateAdminLastSeen } = await import('./firebase.js');
+        // Initial immediate update
+        if(currentAdmin?.gmail) updateAdminLastSeen(currentAdmin.gmail);
+        // Every 30s
+        if(window._adminHeartbeat) clearInterval(window._adminHeartbeat);
+        window._adminHeartbeat = setInterval(()=>{
+            if(currentAdmin?.gmail){
+                updateAdminLastSeen(currentAdmin.gmail).catch(()=>{});
+            }
+        }, 30000);
+    }catch{}
+
     renderThemeGrid();
     bindDashboardEvents();
 }
@@ -576,7 +590,23 @@ function updateEventBadge(isLive){
 function renderDashboardStats(counts){
     const total = counts ? (counts.total||Object.keys(counts).filter(k=>k!=='total').reduce((s,k)=>s+(counts[k]||0),0)) : 0;
     if(DOM.overviewTotal) DOM.overviewTotal.textContent = counts ? (counts.total||0).toLocaleString() : '0';
-    if(DOM.overviewAdmins) DOM.overviewAdmins.textContent = allAdmins.length.toString();
+    // FIX 3 & Bug 3: Active Admins = admins with lastSeen within last 5 minutes + OWNER always counted if session loaded
+    if(DOM.overviewAdmins){
+        const now=Date.now();
+        const fiveMin=5*60*1000;
+        let activeCount=0;
+        allAdmins.forEach(admin=>{
+            const isCurrentOwnerSession = currentAdmin && admin.gmail.toLowerCase()===currentAdmin.gmail.toLowerCase();
+            if(isCurrentOwnerSession){
+                activeCount++; // OWNER always counted as active if session loaded (heartbeat)
+            } else if(admin.lastSeen && (now - admin.lastSeen) < fiveMin){
+                activeCount++;
+            }
+        });
+        // If no lastSeen data yet but owner is logged in, at least 1
+        if(activeCount===0 && currentAdmin) activeCount=1;
+        DOM.overviewAdmins.textContent = activeCount.toString();
+    }
     if(counts && DOM.overviewPopular){
         const entries=Object.entries(counts).filter(([k])=>k!=='total').sort((a,b)=>b[1]-a[1]);
         if(entries.length>0){ const topKey=entries[0][0]; const arch=ARCHETYPES[topKey]; DOM.overviewPopular.textContent=arch?arch.name:topKey; }
@@ -906,7 +936,50 @@ async function handleEditAdminSave(){
     finally{ DOM.editAdminSave.disabled=false; DOM.editAdminSave.textContent='SAVE CHANGES'; }
 }
 
-// Users
+// FIX 5: Strict rank enforcement for user management — cannot ban/delete self, OWNER, ADMINISTRATORS unless OWNER
+function canModifyUser(actor, targetUser){
+    if(!actor || !targetUser) return {allowed:false, reason:'Invalid'};
+    const actorGmail = actor.gmail.toLowerCase();
+    const targetGmail = targetUser.gmail.toLowerCase();
+    const ownerGmail = OWNER_CONFIG.gmail.toLowerCase();
+
+    if(actorGmail === targetGmail) return {allowed:false, reason:'You cannot modify yourself'};
+    if(targetGmail === ownerGmail) return {allowed:false, reason:'Cannot modify the OWNER'};
+    
+    // Check if target is admin
+    const targetAdmin = allAdmins.find(a=>a.gmail.toLowerCase()===targetGmail);
+    if(targetAdmin){
+        if(targetAdmin.role==='owner') return {allowed:false, reason:'Cannot modify the OWNER'};
+        if(targetAdmin.role==='administrator' && actor.role!=='owner'){
+            return {allowed:false, reason:'Only OWNER can modify Administrators'};
+        }
+        if(actor.role==='admin'){
+            // Regular admins cannot modify any admin (even regular admin) unless OWNER/ADMINISTRATOR — per spec
+            // Actually spec says regular admins cannot ban/delete other admins, only OWNER+ADMINISTRATOR can
+            if(targetAdmin.role==='admin' && actor.role==='admin'){
+                // If actor is regular admin, check if they have manage permission? But spec says only OWNER+ADMIN can create admins, so regular should not be able to ban/delete admins at all
+                // We'll block if actor is regular admin and target is any admin
+                return {allowed:false, reason:'Only OWNER and ADMINISTRATOR can modify admins'};
+            }
+        }
+    }
+    return {allowed:true};
+}
+
+function showAdminToast(msg){
+    // Reuse copy-toast or create simple toast
+    const toast = document.getElementById('copy-toast');
+    if(toast){
+        toast.textContent = msg;
+        toast.classList.remove('hidden');
+        toast.classList.add('show');
+        setTimeout(()=>{ toast.classList.remove('show'); toast.classList.add('hidden'); }, 2500);
+    } else {
+        alert(msg);
+    }
+}
+
+// Users - FIX 5 with hidden buttons for self/OWNER/ADMINISTRATOR
 function renderUsers(){
     if(!DOM.usersList) return;
     const search=(document.getElementById('users-search')?.value||'').toLowerCase();
@@ -924,41 +997,74 @@ function renderUsers(){
     if(filtered.length===0){ DOM.usersList.innerHTML='<div class="mono" style="padding:20px; text-align:center; color:var(--text-muted);">No users found</div>'; return; }
 
     filtered.forEach(user=>{
+        const check = currentAdmin ? canModifyUser(currentAdmin, user) : {allowed:true};
+        const isSelf = currentAdmin && user.gmail.toLowerCase()===currentAdmin.gmail.toLowerCase();
+        const isOwnerUser = user.gmail.toLowerCase()===OWNER_CONFIG.gmail.toLowerCase();
+        const targetAdmin = allAdmins.find(a=>a.gmail.toLowerCase()===user.gmail.toLowerCase());
+        const isTargetAdmin = !!targetAdmin;
+        const isTargetAdministrator = targetAdmin?.role==='administrator';
+
+        // Determine if buttons should be hidden
+        const hideBanDelete = !check.allowed || isSelf || isOwnerUser || (isTargetAdministrator && currentAdmin?.role!=='owner') || (isTargetAdmin && currentAdmin?.role==='admin');
+        const hideFeature = isSelf || isOwnerUser;
+
         const div=document.createElement('div');
         div.className='admin-row';
         div.innerHTML=`
             <img class="admin-avatar" src="${user.avatar||`https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=a855f7&color=fff`}" alt="">
-            <div class="admin-row-info"><div class="admin-row-name">${user.displayName} ${user.isBanned?'<span style="color:#ff4d4d;">🚫 BANNED</span>':''} ${user.isFeatured?'<span style="color:var(--neon-green);">⭐ FEATURED</span>':''}</div><div class="admin-row-gmail">${user.gmail} • ${user.totalQuizzes||0} quizzes • ${user.mostFrequentArchetype||'none'} • Joined ${user.createdAt?new Date(user.createdAt).toLocaleDateString():''}</div></div>
-            <div style="display:flex; gap:6px;">
+            <div class="admin-row-info"><div class="admin-row-name">${user.displayName} ${user.isBanned?'<span style="color:#ff4d4d;">🚫 BANNED</span>':''} ${user.isFeatured?'<span style="color:var(--neon-green);">⭐ FEATURED</span>':''} ${isSelf?'<span style="font-size:10px; color:var(--text-muted);">(You)</span>':''} ${isOwnerUser?'<span style="font-size:10px; color:#ffd700;">(OWNER)</span>':''}</div><div class="admin-row-gmail">${user.gmail} • ${user.totalQuizzes||0} quizzes • ${user.mostFrequentArchetype||'none'} • Joined ${user.createdAt?new Date(user.createdAt).toLocaleDateString():''}</div></div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button class="btn-admin-blue" style="font-size:10px; padding:6px 10px;" data-action="view" data-gmail="${user.gmail}">VIEW</button>
-                ${user.isBanned?`<button class="btn-admin-green" style="font-size:10px;" data-action="unban" data-gmail="${user.gmail}">UNBAN</button>`:`<button class="btn-admin-red" style="font-size:10px;" data-action="ban" data-gmail="${user.gmail}">BAN</button>`}
-                ${user.isFeatured?`<button class="btn-admin-blue" style="font-size:10px;" data-action="unfeature" data-gmail="${user.gmail}">UNFEATURE</button>`:`<button class="btn-admin-green" style="font-size:10px;" data-action="feature" data-gmail="${user.gmail}">FEATURE</button>`}
-                <button class="btn-admin-red" style="font-size:10px;" data-action="delete" data-gmail="${user.gmail}">DELETE</button>
+                ${hideBanDelete ? '' : (user.isBanned?`<button class="btn-admin-green" style="font-size:10px;" data-action="unban" data-gmail="${user.gmail}">UNBAN</button>`:`<button class="btn-admin-red" style="font-size:10px;" data-action="ban" data-gmail="${user.gmail}">BAN</button>`)}
+                ${hideFeature ? '' : (user.isFeatured?`<button class="btn-admin-blue" style="font-size:10px;" data-action="unfeature" data-gmail="${user.gmail}">UNFEATURE</button>`:`<button class="btn-admin-green" style="font-size:10px;" data-action="feature" data-gmail="${user.gmail}">FEATURE</button>`)}
+                ${hideBanDelete ? '' : `<button class="btn-admin-red" style="font-size:10px;" data-action="delete" data-gmail="${user.gmail}">DELETE</button>`}
+                ${!check.allowed && !isSelf ? `<span class="mono" style="font-size:10px; color:var(--text-muted); align-self:center;">${check.reason||'Protected'}</span>` : ''}
+                ${isSelf ? `<span class="mono" style="font-size:10px; color:var(--text-muted);">You cannot modify yourself</span>` : ''}
             </div>
         `;
         div.querySelectorAll('button').forEach(btn=>{
             btn.addEventListener('click', async (e)=>{
                 e.stopPropagation(); playClick();
                 const action=btn.dataset.action; const gmail=btn.dataset.gmail;
+                const targetUser = allUsers.find(u=>u.gmail.toLowerCase()===gmail.toLowerCase());
+                const checkModify = currentAdmin ? canModifyUser(currentAdmin, targetUser) : {allowed:false, reason:'Not authenticated'};
+
+                if(['ban','delete','feature','unfeature','unban'].includes(action)){
+                    if(!checkModify.allowed){
+                        showAdminToast(checkModify.reason || 'Action not allowed');
+                        return;
+                    }
+                }
+
                 if(action==='view'){
                     openUserDetailModal(gmail);
                 } else if(action==='ban'){
-                    if(!userCan('ban_users')) return alert('No permission: ban_users');
+                    if(!userCan('ban_users')){ showAdminToast('No permission: ban_users'); return; }
                     if(confirm(`Ban ${gmail}? Hides from leaderboards, prevents login.`)){
-                        const mod=await import('./firebase.js'); await mod.banUser(gmail,true); await logActivity('banned user',gmail);
+                        try{
+                            const mod=await import('./firebase.js'); await mod.banUser(gmail,true); await logActivity('banned user',gmail);
+                        }catch(err){ showAdminToast(err.message); }
                     }
                 } else if(action==='unban'){
-                    if(!userCan('ban_users')) return alert('No permission');
-                    const mod=await import('./firebase.js'); await mod.banUser(gmail,false); await logActivity('unbanned user',gmail);
+                    if(!userCan('ban_users')){ showAdminToast('No permission'); return; }
+                    try{
+                        const mod=await import('./firebase.js'); await mod.banUser(gmail,false); await logActivity('unbanned user',gmail);
+                    }catch(err){ showAdminToast(err.message); }
                 } else if(action==='feature'){
-                    if(!userCan('manage_leaderboard')) return alert('No permission');
-                    const mod=await import('./firebase.js'); await mod.featureUser(gmail,true); await logActivity('featured user',gmail);
+                    if(!userCan('manage_leaderboard')){ showAdminToast('No permission'); return; }
+                    try{
+                        const mod=await import('./firebase.js'); await mod.featureUser(gmail,true); await logActivity('featured user',gmail);
+                    }catch(err){ showAdminToast(err.message); }
                 } else if(action==='unfeature'){
-                    const mod=await import('./firebase.js'); await mod.featureUser(gmail,false); await logActivity('unfeatured user',gmail);
+                    try{
+                        const mod=await import('./firebase.js'); await mod.featureUser(gmail,false); await logActivity('unfeatured user',gmail);
+                    }catch(err){ showAdminToast(err.message); }
                 } else if(action==='delete'){
-                    if(!userCan('delete_users')) return alert('No permission: delete_users');
+                    if(!userCan('delete_users')){ showAdminToast('No permission: delete_users'); return; }
                     if(confirm(`Delete user ${gmail}? Cannot be undone.`)){
-                        const mod=await import('./firebase.js'); await mod.deleteUser(gmail); await logActivity('deleted user',gmail);
+                        try{
+                            const mod=await import('./firebase.js'); await mod.deleteUser(gmail); await logActivity('deleted user',gmail);
+                        }catch(err){ showAdminToast(err.message); }
                     }
                 }
             });
