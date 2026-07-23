@@ -383,8 +383,8 @@ async function handlePasswordAuth(){
     setTimeout(()=>{ showDashboardScreen(); initDashboard(); },700);
 }
 
-// Dashboard
-function initDashboard(){
+// Dashboard - FIX: Made async to allow await import for heartbeat (Bug fix for SyntaxError: Unexpected reserved word)
+async function initDashboard(){
     if(!currentAdmin) return;
     if(DOM.sidebarAvatar) DOM.sidebarAvatar.src=currentAdmin.avatar||`https://ui-avatars.com/api/?name=${encodeURIComponent(currentAdmin.displayName)}&background=a855f7&color=fff`;
     if(DOM.sidebarName) DOM.sidebarName.innerHTML=`${currentAdmin.displayName} ${getRoleEmoji(currentAdmin.role)}`;
@@ -406,7 +406,6 @@ function initDashboard(){
             updateEventBadge(settings.eventLive);
             if(DOM.overviewEvent){ DOM.overviewEvent.textContent=settings.eventLive?'LIVE':'CLOSED'; DOM.overviewEvent.style.color=settings.eventLive?'var(--neon-green)':'#ff5c5c'; }
             if(DOM.announcementInput && document.activeElement!==DOM.announcementInput){ DOM.announcementInput.value=settings.announcement||''; if(DOM.bannerPreview) DOM.bannerPreview.textContent=settings.announcement||'No banner'; }
-            // Leaderboard Ctrl
             if(DOM.autoclearInterval) DOM.autoclearInterval.value=settings.leaderboardAutoClearDays||10;
             if(DOM.nextClearTime) DOM.nextClearTime.textContent=settings.nextAutoClearAt?new Date(settings.nextAutoClearAt).toLocaleString():'Never';
             if(DOM.freezeToggle) DOM.freezeToggle.checked=!!settings.leaderboardFrozen;
@@ -414,19 +413,15 @@ function initDashboard(){
         });
     });
 
-    // Users
     if(usersUnsub) usersUnsub();
     usersUnsub=subscribeToUsers((users)=>{ allUsers=users; renderUsers(); renderBannedFeatured(); renderDashboardStats(); });
 
-    // History
     if(historyUnsub) historyUnsub();
     historyUnsub=subscribeToLeaderboardHistory((history)=>{ leaderboardHistory=history; renderHistory(); });
 
-    // Chat channels
     if(chatChannelsUnsub) chatChannelsUnsub();
     chatChannelsUnsub=subscribeToChatChannels((channels)=>{ chatChannels=channels; renderChatChannels(); });
 
-    // Unread pings
     if(unreadUnsub) unreadUnsub();
     unreadUnsub=subscribeToUnreadPings(currentAdmin.gmail, (pings)=>{
         const badge=DOM.chatUnreadBadge;
@@ -436,19 +431,19 @@ function initDashboard(){
         }
     });
 
-    // Heartbeat every 30s to update lastSeen for active admin counting (Bug 3)
+    // Heartbeat every 30s to update lastSeen for active admin counting (Bug 3) - FIXED: now inside async function, await allowed
     try{
-        const { updateAdminLastSeen } = await import('./firebase.js');
-        // Initial immediate update
-        if(currentAdmin?.gmail) updateAdminLastSeen(currentAdmin.gmail);
-        // Every 30s
-        if(window._adminHeartbeat) clearInterval(window._adminHeartbeat);
-        window._adminHeartbeat = setInterval(()=>{
-            if(currentAdmin?.gmail){
-                updateAdminLastSeen(currentAdmin.gmail).catch(()=>{});
-            }
-        }, 30000);
-    }catch{}
+        const mod = await import('./firebase.js');
+        if(mod.updateAdminLastSeen && currentAdmin?.gmail){
+            mod.updateAdminLastSeen(currentAdmin.gmail);
+            if(window._adminHeartbeat) clearInterval(window._adminHeartbeat);
+            window._adminHeartbeat = setInterval(()=>{
+                if(currentAdmin?.gmail){
+                    mod.updateAdminLastSeen(currentAdmin.gmail).catch(()=>{});
+                }
+            }, 30000);
+        }
+    }catch(e){ console.warn('[DevDNA v1.0] Heartbeat init failed', e); }
 
     renderThemeGrid();
     bindDashboardEvents();
