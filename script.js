@@ -455,14 +455,15 @@ function startQuiz(){
     // Generate new random 12 from 40 pool
     quizSessionQuestions = generateQuizSession(QUIZ_QUESTIONS);
     console.log(`[DevDNA v1.0] Quiz session: 12 random from ${QUIZ_QUESTIONS.length} pool`);
-    DOM.landing.classList.remove('active');
+    // FIX 2: Ensure only quiz visible, hide all other sections (result, leaderboard, profile, etc.)
+    hideAllSections();
     setTimeout(()=>{
-        DOM.landing.style.display='none';
         DOM.quiz.style.display='block';
         void DOM.quiz.offsetWidth;
         DOM.quiz.classList.add('active');
         renderQuestion(currentIndex);
-    },350);
+        updateBannerVisibility();
+    },80);
 }
 function renderQuestion(index){
     const data=quizSessionQuestions ? quizSessionQuestions[index] : QUIZ_QUESTIONS[index];
