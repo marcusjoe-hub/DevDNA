@@ -641,16 +641,70 @@ export function subscribeToUsers(cb){
 }
 export async function deleteUser(gmail){
     const id=sanitizeGmail(gmail);
+    const lowerTarget=gmail.toLowerCase();
+    // FIX 5: Nobody can delete themselves, OWNER, or ADMINISTRATORS unless OWNER
+    try{
+        const currentEmail = auth?.currentUser?.email?.toLowerCase() || null;
+        if(currentEmail && lowerTarget===currentEmail) throw new Error('You cannot delete yourself');
+        if(lowerTarget===OWNER_CONFIG.gmail.toLowerCase()) throw new Error('Cannot modify the OWNER');
+        // Check if target is admin with role administrator
+        const adminDoc = await getAdminByGmail(gmail).catch(()=>null);
+        if(adminDoc){
+            if(adminDoc.role==='administrator' && currentEmail!==OWNER_CONFIG.gmail.toLowerCase()){
+                throw new Error('Only OWNER can modify Administrators');
+            }
+            // Regular admins cannot delete other admins unless OWNER/ADMINISTRATOR
+            // This check will be enforced in UI, but extra guard: if target is admin and current is regular admin, block
+            // We need to get current admin role
+            if(currentEmail){
+                const currentAdminDoc = await getAdminByGmail(currentEmail).catch(()=>null);
+                if(currentAdminDoc && currentAdminDoc.role==='admin' && adminDoc.role!=='admin'){
+                    throw new Error('Regular admins cannot delete other admins of higher rank');
+                }
+            }
+        }
+    }catch(e){
+        if(e.message.includes('Cannot') || e.message.includes('You cannot') || e.message.includes('Only OWNER')){
+            throw e;
+        }
+        // If check fails due to no auth, continue (UI will have blocked)
+    }
     if(firebaseInitialized){ await deleteDoc(doc(db,'users',id)); }
     else{ const users=getFallbackUsers().filter(u=>sanitizeGmail(u.gmail)!==id); setFallbackUsers(users); }
 }
 export async function banUser(gmail, banned=true){
     const id=sanitizeGmail(gmail);
+    const lowerTarget=gmail.toLowerCase();
+    try{
+        const currentEmail = auth?.currentUser?.email?.toLowerCase() || null;
+        if(currentEmail && lowerTarget===currentEmail) throw new Error('You cannot ban yourself');
+        if(lowerTarget===OWNER_CONFIG.gmail.toLowerCase()) throw new Error('Cannot modify the OWNER');
+        const adminDoc = await getAdminByGmail(gmail).catch(()=>null);
+        if(adminDoc){
+            if(adminDoc.role==='administrator' && currentEmail!==OWNER_CONFIG.gmail.toLowerCase()){
+                throw new Error('Only OWNER can modify Administrators');
+            }
+        }
+    }catch(e){
+        if(e.message.includes('Cannot') || e.message.includes('You cannot') || e.message.includes('Only OWNER')){
+            throw e;
+        }
+    }
     if(firebaseInitialized){ await updateDoc(doc(db,'users',id),{isBanned:banned, updatedAt:Date.now()}); }
     else{ const users=getFallbackUsers(); const u=users.find(x=>sanitizeGmail(x.gmail)===id); if(u){ u.isBanned=banned; setFallbackUsers(users); } }
 }
 export async function featureUser(gmail, featured=true){
     const id=sanitizeGmail(gmail);
+    const lowerTarget=gmail.toLowerCase();
+    try{
+        const currentEmail = auth?.currentUser?.email?.toLowerCase() || null;
+        if(currentEmail && lowerTarget===currentEmail) throw new Error('You cannot feature yourself');
+        if(lowerTarget===OWNER_CONFIG.gmail.toLowerCase()) throw new Error('Cannot modify the OWNER');
+    }catch(e){
+        if(e.message.includes('Cannot') || e.message.includes('You cannot')){
+            throw e;
+        }
+    }
     if(firebaseInitialized){ await updateDoc(doc(db,'users',id),{isFeatured:featured, updatedAt:Date.now()}); }
     else{ const users=getFallbackUsers(); const u=users.find(x=>sanitizeGmail(x.gmail)===id); if(u){ u.isFeatured=featured; setFallbackUsers(users); } }
 }
@@ -661,6 +715,15 @@ export async function updateUserLastSeen(gmail){
         try{ await updateDoc(doc(db,'users',id),{lastSeen:now}); }catch{}
     }else{
         const users=getFallbackUsers(); const u=users.find(x=>sanitizeGmail(x.gmail)===id); if(u){ u.lastSeen=now; setFallbackUsers(users); }
+    }
+}
+export async function updateAdminLastSeen(gmail){
+    const id=sanitizeGmail(gmail);
+    const now=Date.now();
+    if(firebaseInitialized){
+        try{ await updateDoc(doc(db,'admins',id),{lastSeen:now, updatedAt:now}); }catch{}
+    }else{
+        const admins=getFallbackAdmins(); const a=admins.find(x=>sanitizeGmail(x.gmail)===id); if(a){ a.lastSeen=now; setFallbackAdmins(admins); }
     }
 }
 
