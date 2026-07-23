@@ -1,5 +1,5 @@
 /**
- * DevDNA v3 - Theme System
+ * DevDNA v1.0 - Theme System
  * 6 Full themes, real-time sync via Firebase /settings/main/theme
  * Applies CSS variables to :root for instant global theming
  */
@@ -118,6 +118,121 @@ export const THEMES = {
             "--bg-card": "rgba(24, 24, 24, 0.8)",
             "--text-primary": "#ffffff"
         }
+    },
+    // NEW 6 themes for v1.0 expansion (Section 14)
+    sakura: {
+        name: "Sakura Dream",
+        desc: "Pink / Purple / White — soft cyberpunk",
+        icon: "🌸",
+        colors: {
+            "--neon-primary": "#ff8fab",
+            "--neon-secondary": "#c77dff",
+            "--neon-tertiary": "#ffffff",
+            "--neon-green": "#ff8fab",
+            "--neon-blue": "#ffb3c6",
+            "--neon-purple": "#c77dff",
+            "--neon-pink": "#ff4d8d",
+            "--neon-orange": "#ffc2d1",
+            "--bg-deep": "#1a0a12",
+            "--bg-elevated": "#2a1020",
+            "--bg-card": "rgba(42, 16, 32, 0.78)",
+            "--text-primary": "#ffe0ec"
+        }
+    },
+    volt: {
+        name: "Volt Yellow",
+        desc: "Yellow / Black / Neon Green — high energy",
+        icon: "⚡",
+        colors: {
+            "--neon-primary": "#ffea00",
+            "--neon-secondary": "#111111",
+            "--neon-tertiary": "#00ff99",
+            "--neon-green": "#00ff99",
+            "--neon-blue": "#ffea00",
+            "--neon-purple": "#ccff00",
+            "--neon-pink": "#ffee33",
+            "--neon-orange": "#ffcc00",
+            "--bg-deep": "#0a0a00",
+            "--bg-elevated": "#1a1a00",
+            "--bg-card": "rgba(26, 26, 0, 0.78)",
+            "--text-primary": "#fffde0"
+        }
+    },
+    galaxy: {
+        name: "Galaxy Void",
+        desc: "Deep Purple / Indigo / Starlight — cosmic",
+        icon: "🌌",
+        colors: {
+            "--neon-primary": "#7b00ff",
+            "--neon-secondary": "#3a0ca3",
+            "--neon-tertiary": "#f0f0ff",
+            "--neon-green": "#b388ff",
+            "--neon-blue": "#7b00ff",
+            "--neon-purple": "#3a0ca3",
+            "--neon-pink": "#9d4edd",
+            "--neon-orange": "#c7d2fe",
+            "--bg-deep": "#0a001a",
+            "--bg-elevated": "#140033",
+            "--bg-card": "rgba(20, 0, 51, 0.8)",
+            "--text-primary": "#e0d4ff"
+        }
+    },
+    inferno: {
+        name: "Inferno Core",
+        desc: "Orange / Red / Black — molten lava",
+        icon: "🔥",
+        colors: {
+            "--neon-primary": "#ff5500",
+            "--neon-secondary": "#cc0000",
+            "--neon-tertiary": "#111111",
+            "--neon-green": "#ff5500",
+            "--neon-blue": "#ff3300",
+            "--neon-purple": "#cc0000",
+            "--neon-pink": "#ff8800",
+            "--neon-orange": "#ffaa00",
+            "--bg-deep": "#1a0500",
+            "--bg-elevated": "#2a0a00",
+            "--bg-card": "rgba(42, 10, 0, 0.8)",
+            "--text-primary": "#ffd0b0"
+        }
+    },
+    arctic: {
+        name: "Arctic Frost",
+        desc: "Ice Blue / White / Silver — clean minimal",
+        icon: "🧊",
+        colors: {
+            "--neon-primary": "#88ddff",
+            "--neon-secondary": "#ffffff",
+            "--neon-tertiary": "#c0c0c0",
+            "--neon-green": "#88ddff",
+            "--neon-blue": "#aaddff",
+            "--neon-purple": "#88bbff",
+            "--neon-pink": "#ddeeff",
+            "--neon-orange": "#ffffff",
+            "--bg-deep": "#0a141a",
+            "--bg-elevated": "#10202a",
+            "--bg-card": "rgba(16, 32, 42, 0.78)",
+            "--text-primary": "#e0f4ff"
+        }
+    },
+    toxic: {
+        name: "Toxic Swamp",
+        desc: "Toxic Green / Dark Brown / Yellow — hacker aesthetic",
+        icon: "🌿",
+        colors: {
+            "--neon-primary": "#39ff14",
+            "--neon-secondary": "#2a1a00",
+            "--neon-tertiary": "#ffcc00",
+            "--neon-green": "#39ff14",
+            "--neon-blue": "#88ff00",
+            "--neon-purple": "#66cc00",
+            "--neon-pink": "#aaff00",
+            "--neon-orange": "#ffcc00",
+            "--bg-deep": "#0a1400",
+            "--bg-elevated": "#1a2500",
+            "--bg-card": "rgba(26, 37, 0, 0.8)",
+            "--text-primary": "#d0ffb0"
+        }
     }
 };
 
@@ -128,7 +243,7 @@ export const THEMES = {
 export function applyTheme(themeKey) {
     const theme = THEMES[themeKey];
     if (!theme) {
-        console.warn(`[DevDNA Themes] Unknown theme: ${themeKey}, falling back to cyberpunk`);
+        console.warn(`[DevDNA v1.0] Unknown theme: ${themeKey}, falling back to cyberpunk`);
         return applyTheme('cyberpunk');
     }
 
@@ -150,7 +265,7 @@ export function applyTheme(themeKey) {
         localStorage.setItem('devdna_theme', themeKey);
     } catch {}
 
-    console.log(`[DevDNA Themes] Applied theme: ${theme.name} (${themeKey})`);
+    console.log(`[DevDNA v1.0] Applied theme: ${theme.name} (${themeKey})`);
     
     // Dispatch event for other modules
     window.dispatchEvent(new CustomEvent('devdna-theme-changed', { detail: { themeKey, theme } }));
