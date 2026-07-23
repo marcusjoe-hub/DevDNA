@@ -157,7 +157,9 @@
     flex-shrink: 0;
 }
 .sidebar-user { display: flex; align-items: center; gap: 12px; }
-.sidebar-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--bg-elevated); border: 1px solid var(--border-glass); object-fit: cover; }
+.sidebar-avatar { width: 36px; height: 36px; border-radius: 50% !important; background: var(--bg-elevated); border: 2px solid var(--neon-purple) !important; object-fit: cover !important; box-shadow: 0 0 10px rgba(168,85,247,0.25); }
+.admin-avatar { border-radius: 50% !important; object-fit: cover !important; border: 2px solid var(--neon-purple) !important; }
+.chat-message img, #chat-members-list img, #users-list img { border-radius: 50% !important; object-fit: cover !important; border: 2px solid var(--neon-purple) !important; }
 .sidebar-name { font-family: var(--font-display); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .sidebar-role { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); letter-spacing: 0.12em; }
 .sidebar-role.owner { color: #ffd700; text-shadow: 0 0 8px #ffd700; }
