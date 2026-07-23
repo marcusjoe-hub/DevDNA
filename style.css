@@ -1,5 +1,5 @@
 /* 
-* DevDNA v2 - Massive Upgrade
+* DevDNA v1.0 - Massive Upgrade
 * Cyberpunk Glassmorphism + Matrix + Custom Cursor + Boot + Admin
 * Preserves v1 look, adds new features.
 */
@@ -61,6 +61,27 @@ body {
 /* Theme transition for main elements */
 .glass-panel, .top-bar, .btn, .option-card, .result-card, .announcement-banner, .admin-sidebar, .admin-card, .overview-card {
     transition: background-color var(--transition-theme) ease, border-color var(--transition-theme) ease, box-shadow var(--transition-theme) ease, color var(--transition-theme) ease;
+}
+
+/* Cursor Accuracy Fix - Section 15 */
+*, *::before, *::after {
+    cursor: none !important;
+}
+input, textarea, input[type="text"], input[type="password"], input[type="email"] {
+    cursor: text !important;
+}
+/* Exception for custom cursor active - hide default, show custom */
+body.custom-cursor-active, body.custom-cursor-active * {
+    cursor: none !important;
+}
+body.custom-cursor-active input, body.custom-cursor-active textarea {
+    cursor: text !important;
+}
+/* Disable custom cursor on touch devices */
+@media (pointer: coarse) {
+    *, *::before, *::after { cursor: auto !important; }
+    body.custom-cursor-active, body.custom-cursor-active * { cursor: auto !important; }
+    .custom-cursor { display: none !important; }
 }
 
 /* Hide default cursor on desktop if custom cursor enabled */
@@ -529,13 +550,40 @@ body.has-banner .app-container { padding-top: calc(32px + var(--banner-height, 4
 .firebase-status { margin-top:14px; font-size:10px; letter-spacing:0.1em; color:var(--text-muted); display:flex; align-items:center; gap:8px; }
 .total-count { margin-top:10px; font-size:11px; color:var(--text-muted); text-align:center; padding-top:12px; border-top:1px dashed rgba(255,255,255,0.08); }
 
-/* Footer */
-.app-footer {
-    display:flex; justify-content:center; align-items:center; gap:12px; padding:20px;
-    font-size:10px; letter-spacing:0.08em; color:var(--text-muted);
-    border-top:1px solid var(--border-glass); flex-wrap:wrap; text-align:center;
+/* Footer v1.0 - Built by ByteCraft */
+.app-footer, .app-footer-v1 {
+    display:flex; flex-direction:column; justify-content:center; align-items:center; gap:8px; padding:28px 20px;
+    font-size:11px; letter-spacing:0.08em; color:var(--text-muted);
+    border-top:1px solid var(--border-glass); text-align:center;
+    background: rgba(0,0,0,0.2);
 }
+.footer-line { font-family:var(--font-mono); font-size:10px; letter-spacing:0.12em; color:var(--text-muted); opacity:0.6; }
+.footer-brand { font-family:var(--font-display); font-weight:800; font-size:13px; color:var(--text-primary); text-shadow: 0 0 12px rgba(168,85,247,0.4), 0 0 20px rgba(0,204,255,0.2); letter-spacing:0.04em; }
+.footer-sub { font-family:var(--font-mono); font-size:10px; margin-top:4px; }
 .footer-sep { opacity:0.3; }
+
+/* New announcement banner with clickable START ANALYSIS */
+.announcement-banner .banner-cta {
+    color: var(--neon-primary);
+    font-weight: 800;
+    text-shadow: 0 0 10px currentColor;
+    cursor: pointer;
+    margin-left: 8px;
+    padding: 2px 10px;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.04);
+    transition: all 0.22s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.announcement-banner .banner-cta:hover {
+    background: var(--neon-primary);
+    color: black;
+    box-shadow: 0 0 18px currentColor;
+    transform: scale(1.05);
+}
 
 /* Buttons */
 .btn {
