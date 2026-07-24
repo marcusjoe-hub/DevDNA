@@ -144,6 +144,16 @@ const DOM = {
     newChannelRestricted: document.getElementById('new-channel-restricted'),
     createChannelCancel: document.getElementById('create-channel-cancel'),
     createChannelCreate: document.getElementById('create-channel-create'),
+    // Chat clear modals
+    clearAllMessagesBtn: document.getElementById('clear-all-messages-btn'),
+    clearAllChannelsBtn: document.getElementById('clear-all-channels-btn'),
+    clearChatModal: document.getElementById('clear-chat-modal'),
+    clearChatChannelName: document.getElementById('clear-chat-channel-name'),
+    clearChatCancel: document.getElementById('clear-chat-cancel'),
+    clearChatConfirm: document.getElementById('clear-chat-confirm'),
+    clearAllChannelsModal: document.getElementById('clear-all-channels-modal'),
+    clearAllChannelsCancel: document.getElementById('clear-all-channels-cancel'),
+    clearAllChannelsConfirm: document.getElementById('clear-all-channels-confirm'),
     // Other modals
     usersActionModal: document.getElementById('users-action-modal'),
     usersActionContent: document.getElementById('users-action-content'),
@@ -324,6 +334,15 @@ function filterTabsByPermission(){
         if(userCan(perm)) tab.classList.remove('hidden-perm');
         else tab.classList.add('hidden-perm');
     });
+    // Handle clear chat buttons visibility
+    if(DOM.clearAllMessagesBtn){
+        if(userCan('clear_chat')) DOM.clearAllMessagesBtn.style.display='inline-flex';
+        else DOM.clearAllMessagesBtn.style.display='none';
+    }
+    if(DOM.clearAllChannelsBtn){
+        if(currentAdmin?.role==='owner') DOM.clearAllChannelsBtn.classList.remove('hidden');
+        else DOM.clearAllChannelsBtn.classList.add('hidden');
+    }
 }
 
 // Google Sign-In
@@ -559,6 +578,41 @@ function bindDashboardEvents(){
     DOM.refreshHistoryBtn && (DOM.refreshHistoryBtn.onclick=()=>{ playClick(); renderHistory(); });
 
     // Chat
+    DOM.clearAllMessagesBtn && (DOM.clearAllMessagesBtn.onclick=()=>{
+        playClick();
+        if(!userCan('clear_chat')){ alert('No permission: clear_chat'); return; }
+        // Show confirmation with channel name
+        if(DOM.clearChatChannelName) DOM.clearChatChannelName.textContent = '# ' + currentChatChannel;
+        DOM.clearChatModal?.classList.remove('hidden');
+    });
+    DOM.clearAllChannelsBtn && (DOM.clearAllChannelsBtn.onclick=()=>{
+        playClick();
+        if(currentAdmin.role!=='owner'){ alert('Only OWNER can clear all channels'); return; }
+        DOM.clearAllChannelsModal?.classList.remove('hidden');
+    });
+    // Clear chat modals handlers
+    document.getElementById('clear-chat-cancel')?.addEventListener('click',()=>{ playClick(); DOM.clearChatModal?.classList.add('hidden'); });
+    document.getElementById('clear-chat-confirm')?.addEventListener('click', async()=>{
+        playClick();
+        DOM.clearChatModal?.classList.add('hidden');
+        const mod=await import('./firebase.js');
+        await mod.clearAllChannelMessages(currentChatChannel);
+        const toast=document.getElementById('copy-toast');
+        if(toast){ toast.textContent=`🧹 All messages in #${currentChatChannel} cleared`; toast.classList.remove('hidden'); toast.classList.add('show'); setTimeout(()=>{ toast.classList.remove('show'); toast.classList.add('hidden'); },2500); }
+        await logActivity('cleared all messages', `in #${currentChatChannel}`);
+    });
+    document.getElementById('clear-all-channels-cancel')?.addEventListener('click',()=>{ playClick(); DOM.clearAllChannelsModal?.classList.add('hidden'); });
+    document.getElementById('clear-all-channels-confirm')?.addEventListener('click', async()=>{
+        playClick();
+        DOM.clearAllChannelsModal?.classList.add('hidden');
+        if(!confirm('This will delete ALL messages across ALL channels. This CANNOT be undone. Are you absolutely sure?')) return;
+        const mod=await import('./firebase.js');
+        await mod.clearAllChatMessages();
+        const toast=document.getElementById('copy-toast');
+        if(toast){ toast.textContent=`☢️ All messages across all channels cleared`; toast.classList.remove('hidden'); toast.classList.add('show'); setTimeout(()=>{ toast.classList.remove('show'); toast.classList.add('hidden'); },3000); }
+        await logActivity('cleared all messages across all channels');
+    });
+
     DOM.newChannelBtn && (DOM.newChannelBtn.onclick=()=>{
         playClick(); if(currentAdmin.role!=='owner'){ alert('Only OWNER can create channels'); return; } DOM.chatChannelModal?.classList.remove('hidden');
     });
@@ -782,7 +836,7 @@ function renderAdmins(){
         const permsCount = Object.values(admin.permissions||{}).filter(Boolean).length;
         const totalPerms = Object.keys(require('../firebase.js').getDefaultPermissions ? require('../firebase.js').getDefaultPermissions() : {}).length || 19;
         // Use 19 as total per spec
-        const permDisplay = (admin.role==='owner' || isFakeOwner) ? '<span style="color:#ffd700;">🌟 FULL ACCESS</span>' : (admin.role==='administrator' ? '<span style="color:var(--neon-purple);">⚡ FULL ACCESS</span>' : `${permsCount}/19 permissions`);
+        const permDisplay = (admin.role==='owner' || isFakeOwner) ? '<span style="color:#ffd700;">🌟 FULL ACCESS</span>' : (admin.role==='administrator' ? '<span style="color:var(--neon-purple);">⚡ FULL ACCESS</span>' : `${permsCount}/20 permissions`);
 
         const div=document.createElement('div');
         div.className=`admin-row ${badgeClass} ${isFakeOwner?'fake-owner':''}`;
@@ -1390,8 +1444,6 @@ function renderChatMessages(messages){
         if(msg.deleted && msg.deletedBy){
             div.innerHTML=`<div style="font-style:italic; color:var(--text-muted); font-size:12px; width:100%; text-align:center;">This message was deleted by ${msg.deletedBy}</div>`;
         } else if(isGrouped){
-            div.innerHTML=`<div style="width:32px;"></div><div style="flex:1;"><div style="font-size:13px;">${linkifyMentions(msg.content)}</div></div><div style="display:flex; gap:6px; opacity:0;" class="msg-actions"><button class="btn-admin-blue" style="font-size:10px; padding:2px 6px;" data-action="edit" data-id="${msg.id}">✏️</button><button class="btn-admin-red" style="font-size:10px; padding:2px 6px;" data-action="delete" data-id="${msg.id}">🗑️</button></div>`;
-        } else {
             div.innerHTML=`<div style="width:32px;"></div><div style="flex:1;"><div style="font-size:13px;">${linkifyMentions(msg.content)}</div></div><div style="display:flex; gap:6px; opacity:0;" class="msg-actions"><button class="btn-admin-blue" style="font-size:10px; padding:2px 6px;" data-action="edit" data-id="${msg.id}">✏️</button><button class="btn-admin-red" style="font-size:10px; padding:2px 6px;" data-action="delete" data-id="${msg.id}">🗑️</button></div>`;
         } else {
             div.innerHTML=`
