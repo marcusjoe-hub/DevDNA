@@ -261,6 +261,7 @@ async function ensureDocs(){
     }catch(e){ console.warn('[DevDNA v1.0] ensureDocs failed',e); }
 }
 if(firebaseInitialized) ensureDocs();
+else ensureOwnerExists(); // FIX 1 & 2: Ensure owner exists even in mock mode so Admins tab and chat members not empty
 
 // LEADERBOARD (anonymous)
 export async function incrementArchetype(key){
