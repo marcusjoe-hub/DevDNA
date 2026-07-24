@@ -71,13 +71,33 @@ input, textarea, input[type="text"], input[type="password"], input[type="email"]
     cursor: text !important;
 }
 
-/* FIX 1: Avatar circular everywhere with neon border */
-img[class*="avatar"], .admin-avatar, .sidebar-avatar, .header-avatar, #landing-avatar,
-#chat-messages img, #chat-members-list img, #users-list img, #user-leaderboard-list img, #profile-content img, .leader-item img, .overview-card img {
+/* FIX 1 & 5: Avatar circular everywhere with neon border - per Bug 5 spec */
+.avatar,
+.user-avatar,
+.admin-avatar,
+.chat-avatar,
+.member-avatar,
+.profile-avatar,
+.header-avatar,
+.leaderboard-avatar,
+img[data-avatar],
+img[class*="avatar"],
+.admin-avatar,
+.sidebar-avatar,
+.header-avatar,
+#landing-avatar,
+#chat-messages img,
+#chat-members-list img,
+#users-list img,
+#user-leaderboard-list img,
+#profile-content img,
+.leader-item img,
+.overview-card img {
     border-radius: 50% !important;
     object-fit: cover !important;
-    border: 2px solid var(--neon-purple) !important;
-    box-shadow: 0 0 10px rgba(168,85,247,0.25) !important;
+    aspect-ratio: 1 / 1 !important;
+    border: 2px solid var(--neon-primary) !important;
+    box-shadow: 0 0 8px var(--neon-primary) !important;
 }
 .header-avatar {
     width: 36px; height: 36px; border-radius: 50% !important;
@@ -85,6 +105,7 @@ img[class*="avatar"], .admin-avatar, .sidebar-avatar, .header-avatar, #landing-a
 #landing-avatar { width:36px; height:36px; border-radius:50% !important; }
 .admin-avatar { width:40px; height:40px; border-radius:50% !important; }
 .sidebar-avatar { width:36px; height:36px; border-radius:50% !important; }
+.profile-avatar { width:64px; height:64px; border-radius:50% !important; }
 /* Exception for custom cursor active - hide default, show custom */
 body.custom-cursor-active, body.custom-cursor-active * {
     cursor: none !important;
