@@ -74,7 +74,8 @@ const DEFAULT_PERMISSIONS = {
     manage_leaderboard: true,
     view_leaderboard_history: true,
     view_chat: true,
-    send_chat: true
+    send_chat: true,
+    clear_chat: true
 };
 
 const PERMISSION_DEFS = [
@@ -96,7 +97,8 @@ const PERMISSION_DEFS = [
     { id: 'manage_leaderboard', name: '🏆 Manage Leaderboard', desc: 'Configure auto-clear interval, freeze, feature users.' },
     { id: 'view_leaderboard_history', name: '📜 View Leaderboard History', desc: 'See past leaderboard snapshots. Owner+Administrator only automatically.' },
     { id: 'view_chat', name: '💬 View Admin Chat', desc: 'Can see the admin chat tab and read messages.' },
-    { id: 'send_chat', name: '✍️ Send Chat Messages', desc: 'Can send messages in admin chat. Requires view_chat.' }
+    { id: 'send_chat', name: '✍️ Send Chat Messages', desc: 'Can send messages in admin chat. Requires view_chat.' },
+    { id: 'clear_chat', name: '🧹 Clear Chat Messages', desc: 'Can delete ALL messages in ANY chat channel. Nuclear option.' }
 ];
 
 // Fallback helpers
@@ -926,6 +928,36 @@ export async function deleteChatMessage(channelId, messageId, deletedByGmail){
     }
 }
 
+export async function clearAllChannelMessages(channelId){
+    if(firebaseInitialized){
+        const col=collection(db,'chat_channels',channelId,'messages');
+        const snaps=await getDocs(col);
+        const promises=[];
+        snaps.forEach(d=>{ promises.push(deleteDoc(doc(db,'chat_channels',channelId,'messages',d.id))); });
+        await Promise.all(promises);
+    } else {
+        // mock: trigger clear
+        triggerMockChat();
+    }
+}
+
+export async function clearAllChatMessages(){
+    if(firebaseInitialized){
+        const channelsCol=collection(db,'chat_channels');
+        const channelSnaps=await getDocs(channelsCol);
+        for(const chDoc of channelSnaps.docs){
+            const channelId=chDoc.id;
+            const msgsCol=collection(db,'chat_channels',channelId,'messages');
+            const msgSnaps=await getDocs(msgsCol);
+            const promises=[];
+            msgSnaps.forEach(m=>{ promises.push(deleteDoc(doc(db,'chat_channels',channelId,'messages',m.id))); });
+            await Promise.all(promises);
+        }
+    } else {
+        triggerMockChat();
+    }
+}
+
 // Unread pings
 export function subscribeToUnreadPings(gmail, cb){
     if(firebaseInitialized){
@@ -1054,6 +1086,8 @@ if(typeof window!=='undefined'){
         sendChatMessage,
         editChatMessage,
         deleteChatMessage,
+        clearAllChannelMessages,
+        clearAllChatMessages,
         subscribeToUnreadPings,
         clearUnreadPing,
         clearAllUnreadPings
