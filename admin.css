@@ -405,6 +405,44 @@
 .password-field { position:relative; }
 .password-eye { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:14px; }
 
+/* FIX 3: @ Mention autocomplete dropdown */
+.mention-autocomplete {
+    position: absolute;
+    bottom: 60px;
+    left: 12px;
+    right: 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-glass);
+    border-radius: 10px;
+    max-height: 180px;
+    overflow-y: auto;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.6), 0 0 20px rgba(168,85,247,0.15);
+    z-index: 20;
+    backdrop-filter: blur(12px);
+}
+.mention-autocomplete.hidden { display: none !important; }
+.mention-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.mention-item:last-child { border-bottom: none; }
+.mention-item:hover, .mention-item.active {
+    background: rgba(168,85,247,0.15);
+}
+.mention-item img {
+    width: 24px; height: 24px;
+    border-radius: 50% !important;
+    object-fit: cover;
+    border: 1px solid var(--border-glass);
+    flex-shrink: 0;
+}
+.mention-item-info { flex: 1; display: flex; flex-direction: column; }
+.mention-item-name { font-size: 13px; font-weight: 600; }
+.mention-item-role { font-size: 10px; color: var(--text-muted); }
+
 .hidden { display:none !important; }
 
 /* Responsive sidebar -> hamburger */
