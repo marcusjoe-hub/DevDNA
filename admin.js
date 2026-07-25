@@ -16,6 +16,7 @@ import {
     getAllUsers, subscribeToUsers, deleteUser, banUser, featureUser,
     getLeaderboardHistory, subscribeToLeaderboardHistory, deleteLeaderboardSnapshot, performAutoClear, addLeaderboardSnapshot,
     getChatChannels, subscribeToChatChannels, createChatChannel, deleteChatChannel, subscribeToChatMessages, sendChatMessage, editChatMessage, deleteChatMessage, subscribeToUnreadPings, clearUnreadPing, clearAllUnreadPings,
+    updateChatPreferences, getChatPreferences,
     isFirebaseConfigured
 } from './firebase.js';
 import { THEMES, applyTheme } from './themes.js';
@@ -172,6 +173,7 @@ let chatChannels=[];
 let currentChatChannel='general';
 let chatMessagesUnsub=null;
 let unreadPings=[];
+let chatPreferences={playSound:true, showToasts:true, showBadges:true}; // FIX 3: chat notif settings
 let attemptCount=0;
 let editingQuestionId=null;
 let deletingQuestionId=null;
@@ -320,6 +322,12 @@ function initSidebar(){
             const content=document.getElementById(`tab-${tab.dataset.tab}`);
             if(content) content.classList.add('active');
             if(window.innerWidth<=900) DOM.sidebar?.classList.add('collapsed');
+            // FIX 4: #general Messages Don't Load on First Visit — auto-load default channel when Chat tab opens
+            if(tab.dataset.tab==='chat'){
+                if(DOM.chatHeader) DOM.chatHeader.textContent=`# ${currentChatChannel}`;
+                if(DOM.chatInput) DOM.chatInput.placeholder=`Message #${currentChatChannel}`;
+                subscribeToCurrentChat();
+            }
         });
     });
     DOM.sidebarToggle?.addEventListener('click',()=>{
@@ -439,29 +447,58 @@ async function initDashboard(){
     historyUnsub=subscribeToLeaderboardHistory((history)=>{ leaderboardHistory=history; renderHistory(); });
 
     if(chatChannelsUnsub) chatChannelsUnsub();
-    chatChannelsUnsub=subscribeToChatChannels((channels)=>{ chatChannels=channels; renderChatChannels(); });
+    chatChannelsUnsub=subscribeToChatChannels((channels)=>{
+        chatChannels=channels;
+        renderChatChannels();
+        // FIX 4: Automatically load and subscribe to DEFAULT channel (#general) on Chat tab open / first visit
+        if(chatChannels.length>0 && !chatMessagesUnsub){
+            // If current channel not in list, default to general
+            if(!chatChannels.find(c=>c.id===currentChatChannel)){
+                currentChatChannel = chatChannels[0]?.id || 'general';
+            }
+            if(DOM.chatHeader) DOM.chatHeader.textContent=`# ${currentChatChannel}`;
+            if(DOM.chatInput) DOM.chatInput.placeholder=`Message #${currentChatChannel}`;
+            subscribeToCurrentChat();
+        }
+    });
 
     if(unreadUnsub) unreadUnsub();
     let lastPingCount=0;
+    // Load chat preferences
+    try{
+        const { getChatPreferences } = await import('./firebase.js');
+        const prefs = await getChatPreferences(currentAdmin.gmail);
+        if(prefs) chatPreferences = {...chatPreferences, ...prefs};
+        console.log('[DevDNA v1.0] Chat preferences loaded', chatPreferences);
+    }catch(e){ console.warn('[DevDNA v1.0] Failed to load chat prefs', e); }
     unreadUnsub=subscribeToUnreadPings(currentAdmin.gmail, (pings)=>{
         const badge=DOM.chatUnreadBadge;
         if(badge){
-            if(pings.length>0){ badge.textContent=pings.length; badge.classList.remove('hidden'); }
+            if(chatPreferences.showBadges!==false && pings.length>0){ badge.textContent=pings.length; badge.classList.remove('hidden'); }
             else badge.classList.add('hidden');
         }
-        // FIX 3: Ping notification toast + sound when new ping arrives
-        if(pings.length>lastPingCount && lastPingCount>0){
-            const newPings=pings.slice(0, pings.length-lastPingCount);
-            newPings.forEach(ping=>{
-                showPingToast(ping);
-                try{ window.__DevDNA?.playSFX?.('ping'); }catch{}
-                // Play ping sound from audio folder
-                try{
-                    const audio=new Audio('audio/ping.mp3');
-                    audio.volume=0.15;
-                    audio.play().catch(()=>{});
-                }catch{}
-            });
+        // FIX 3: Ping notification toast + sound when new ping arrives, respecting preferences and cache-busting
+        if(pings.length>lastPingCount && lastPingCount>=0){
+            const newPings = lastPingCount===0 ? [] : pings.slice(0, pings.length-lastPingCount);
+            // On first load, don't spam toasts, but for new arrivals do
+            if(newPings.length>0){
+                newPings.forEach(ping=>{
+                    if(chatPreferences.showToasts!==false){
+                        showPingToast(ping);
+                    }
+                    if(chatPreferences.playSound!==false){
+                        try{ window.__DevDNA?.playSFX?.('ping'); }catch{}
+                        // Cache-busted audio with silent fail
+                        try{
+                            const audio=new Audio('audio/ping.mp3?v=1');
+                            audio.volume=0.15;
+                            audio.addEventListener('error', ()=>{});
+                            const pp=audio.play();
+                            if(pp&&pp.catch) pp.catch(()=>{});
+                        }catch{}
+                    }
+                });
+            }
         }
         lastPingCount=pings.length;
         unreadPings=pings;
@@ -661,6 +698,59 @@ function bindDashboardEvents(){
         }
     });
 
+    // FIX 3: Chat Settings Button Does Nothing — add modal with preferences
+    DOM.chatNotifSettingsBtn && (DOM.chatNotifSettingsBtn.onclick=async()=>{
+        playClick();
+        const modal=document.getElementById('chat-notif-settings-modal');
+        if(!modal) return;
+        // Load prefs
+        try{
+            const mod=await import('./firebase.js');
+            const prefs=await mod.getChatPreferences(currentAdmin.gmail);
+            chatPreferences = {...chatPreferences, ...prefs};
+        }catch{}
+        const playEl=document.getElementById('notif-play-sound');
+        const toastEl=document.getElementById('notif-show-toasts');
+        const badgeEl=document.getElementById('notif-show-badges');
+        if(playEl) playEl.checked = chatPreferences.playSound!==false;
+        if(toastEl) toastEl.checked = chatPreferences.showToasts!==false;
+        if(badgeEl) badgeEl.checked = chatPreferences.showBadges!==false;
+        modal.classList.remove('hidden');
+    });
+    document.getElementById('notif-settings-cancel')?.addEventListener('click',()=>{
+        playClick();
+        document.getElementById('chat-notif-settings-modal')?.classList.add('hidden');
+    });
+    document.getElementById('notif-settings-save')?.addEventListener('click', async()=>{
+        playClick();
+        const playEl=document.getElementById('notif-play-sound');
+        const toastEl=document.getElementById('notif-show-toasts');
+        const badgeEl=document.getElementById('notif-show-badges');
+        chatPreferences = {
+            playSound: playEl ? playEl.checked : true,
+            showToasts: toastEl ? toastEl.checked : true,
+            showBadges: badgeEl ? badgeEl.checked : true
+        };
+        try{
+            const mod=await import('./firebase.js');
+            await mod.updateChatPreferences(currentAdmin.gmail, chatPreferences);
+            await logActivity('updated chat notification settings', JSON.stringify(chatPreferences));
+        }catch(e){ console.warn('Failed to save chat prefs', e); }
+        document.getElementById('chat-notif-settings-modal')?.classList.add('hidden');
+        // Apply badge visibility immediately
+        const badge=DOM.chatUnreadBadge;
+        if(badge){
+            if(chatPreferences.showBadges===false) badge.classList.add('hidden');
+            else if(unreadPings.length>0){ badge.textContent=unreadPings.length; badge.classList.remove('hidden'); }
+        }
+        const toast=document.getElementById('copy-toast');
+        if(toast){
+            toast.textContent='🔔 Chat notification settings saved';
+            toast.classList.remove('hidden'); toast.classList.add('show');
+            setTimeout(()=>{ toast.classList.remove('show'); toast.classList.add('hidden'); }, 2000);
+        }
+    });
+
     // Logout
     DOM.logoutBtn && (DOM.logoutBtn.onclick=async()=>{
         playClick(); await logActivity('logged out'); await signOutUser(); currentAdmin=null; currentFirebaseUser=null; try{localStorage.removeItem('devdna_admin_session');}catch{} showGoogleScreen();
@@ -834,9 +924,8 @@ function renderAdmins(){
         const isProtected = isRealOwner;
 
         const permsCount = Object.values(admin.permissions||{}).filter(Boolean).length;
-        const totalPerms = Object.keys(require('../firebase.js').getDefaultPermissions ? require('../firebase.js').getDefaultPermissions() : {}).length || 19;
-        // Use 19 as total per spec
-        const permDisplay = (admin.role==='owner' || isFakeOwner) ? '<span style="color:#ffd700;">🌟 FULL ACCESS</span>' : (admin.role==='administrator' ? '<span style="color:var(--neon-purple);">⚡ FULL ACCESS</span>' : `${permsCount}/20 permissions`);
+        const totalPerms = getPermissionDefs().length || 20;
+        const permDisplay = (admin.role==='owner' || isFakeOwner) ? '<span style="color:#ffd700;">🌟 FULL ACCESS</span>' : (admin.role==='administrator' ? '<span style="color:var(--neon-purple);">⚡ FULL ACCESS</span>' : `${permsCount}/${totalPerms} permissions`);
 
         const div=document.createElement('div');
         div.className=`admin-row ${badgeClass} ${isFakeOwner?'fake-owner':''}`;
