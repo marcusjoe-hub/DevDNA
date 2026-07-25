@@ -174,6 +174,15 @@ let currentChatChannel='general';
 let chatMessagesUnsub=null;
 let unreadPings=[];
 let chatPreferences={playSound:true, showToasts:true, showBadges:true}; // FIX 3: chat notif settings
+// PART 3+4: Centralized notification pipeline - ping audio preload, user interaction flag, debounce, title, OS notification
+let pingAudio=null;
+let userInteractedAdmin=false;
+let pendingPingsQueue=[];
+let lastPingSoundTime=0;
+let pingTimestamps=[]; // for debouncing 5+ within 2s
+let originalDocTitle=typeof document!=='undefined' ? document.title : 'DevDNA Admin';
+let isFirstPingLoad=true;
+let browserNotifPermissionAsked=false;
 let attemptCount=0;
 let editingQuestionId=null;
 let deletingQuestionId=null;
@@ -462,6 +471,49 @@ async function initDashboard(){
         }
     });
 
+    // PART 1: Preload ping audio with cache-busting, error handling, volume
+    try{
+        pingAudio=new Audio('audio/ping.mp3?v=1');
+        pingAudio.preload='auto';
+        pingAudio.volume=0.15;
+        pingAudio.addEventListener('error', (e)=>{
+            console.warn('[DevDNA v1.0] Ping audio failed to load:', e);
+        });
+        pingAudio.addEventListener('canplaythrough', ()=>{
+            console.log('[DevDNA v1.0] Ping audio ready');
+        });
+        try{ pingAudio.load(); }catch{}
+    }catch(e){ console.warn('[DevDNA v1.0] pingAudio init failed', e); }
+
+    // PART 3: Autoplay compliance - track user interaction
+    const markAdminInteracted=()=>{
+        if(!userInteractedAdmin){
+            userInteractedAdmin=true;
+            console.log('[DevDNA v1.0] Admin user interacted - audio unlocked');
+            // Play queued pings if any
+            if(pendingPingsQueue.length>0){
+                console.log(`[DevDNA v1.0] Playing ${pendingPingsQueue.length} queued pings`);
+                pendingPingsQueue.forEach(p=>{ playPingSoundWithDebounce(p); });
+                pendingPingsQueue=[];
+            }
+        }
+    };
+    document.addEventListener('click', markAdminInteracted);
+    document.addEventListener('keydown', markAdminInteracted);
+
+    // PART 4: Browser Notification API permission request (once)
+    try{
+        if('Notification' in window && Notification.permission==='default' && !browserNotifPermissionAsked){
+            browserNotifPermissionAsked=true;
+            setTimeout(()=>{
+                Notification.requestPermission().then(perm=>{
+                    console.log('[DevDNA v1.0] Notification permission:', perm);
+                    try{ localStorage.setItem('devdna_notif_perm', perm); }catch{}
+                }).catch(()=>{});
+            }, 2000); // ask after 2s to not be intrusive
+        }
+    }catch{}
+
     if(unreadUnsub) unreadUnsub();
     let lastPingCount=0;
     // Load chat preferences
@@ -471,34 +523,46 @@ async function initDashboard(){
         if(prefs) chatPreferences = {...chatPreferences, ...prefs};
         console.log('[DevDNA v1.0] Chat preferences loaded', chatPreferences);
     }catch(e){ console.warn('[DevDNA v1.0] Failed to load chat prefs', e); }
+
+    isFirstPingLoad=true;
     unreadUnsub=subscribeToUnreadPings(currentAdmin.gmail, (pings)=>{
         const badge=DOM.chatUnreadBadge;
+        // PART 2: Self-ping should ALSO trigger - do NOT exclude current user gmail
+        // PART 4: Update document.title with unread count, badge handling with preferences
         if(badge){
-            if(chatPreferences.showBadges!==false && pings.length>0){ badge.textContent=pings.length; badge.classList.remove('hidden'); }
-            else badge.classList.add('hidden');
-        }
-        // FIX 3: Ping notification toast + sound when new ping arrives, respecting preferences and cache-busting
-        if(pings.length>lastPingCount && lastPingCount>=0){
-            const newPings = lastPingCount===0 ? [] : pings.slice(0, pings.length-lastPingCount);
-            // On first load, don't spam toasts, but for new arrivals do
-            if(newPings.length>0){
-                newPings.forEach(ping=>{
-                    if(chatPreferences.showToasts!==false){
-                        showPingToast(ping);
-                    }
-                    if(chatPreferences.playSound!==false){
-                        try{ window.__DevDNA?.playSFX?.('ping'); }catch{}
-                        // Cache-busted audio with silent fail
-                        try{
-                            const audio=new Audio('audio/ping.mp3?v=1');
-                            audio.volume=0.15;
-                            audio.addEventListener('error', ()=>{});
-                            const pp=audio.play();
-                            if(pp&&pp.catch) pp.catch(()=>{});
-                        }catch{}
-                    }
-                });
+            if(chatPreferences.showBadges!==false && pings.length>0){
+                badge.textContent=pings.length;
+                badge.classList.remove('hidden');
+                // PART 3: Visual pulse animation when new ping arrives
+                badge.classList.add('ping-pulse');
+                setTimeout(()=>badge.classList.remove('ping-pulse'), 800);
+            } else {
+                badge.classList.add('hidden');
             }
+        }
+        // Update document.title
+        if(pings.length>0){
+            document.title=`(${pings.length}) ${originalDocTitle}`;
+        } else {
+            document.title=originalDocTitle;
+        }
+
+        // Determine new pings - FIX 2: Fix self-ping detection, first load should not spam but first real ping after empty should trigger
+        if(isFirstPingLoad){
+            lastPingCount=pings.length;
+            isFirstPingLoad=false;
+            console.log('[DevDNA v1.0] Initial pings loaded:', pings.length);
+        } else if(pings.length>lastPingCount){
+            const newPingsCount=pings.length-lastPingCount;
+            const newPings=pings.slice(0, newPingsCount);
+            console.log(`[DevDNA v1.0] ${newPingsCount} new ping(s) detected (including self-pings)`);
+            newPings.forEach(ping=>{
+                // PART 4: Centralized notifyAdmin
+                notifyAdmin(ping);
+            });
+        } else if(pings.length<lastPingCount){
+            // Pings cleared
+            console.log('[DevDNA v1.0] Pings cleared, was', lastPingCount, 'now', pings.length);
         }
         lastPingCount=pings.length;
         unreadPings=pings;
@@ -1159,6 +1223,105 @@ function showAdminToast(msg){
     } else {
         alert(msg);
     }
+}
+
+// PART 4: Centralized notifyAdmin pipeline for reliability
+function playPingSoundWithDebounce(pingData){
+    // Debouncing: if 5+ pings arrive within 2 seconds, only play sound ONCE
+    const now=Date.now();
+    pingTimestamps.push(now);
+    // Keep only last 2 seconds
+    pingTimestamps=pingTimestamps.filter(t=>now-t<=2000);
+    if(pingTimestamps.length>=5){
+        // If 5+ in 2s, debounce - only play if last sound was >2s ago
+        if(now-lastPingSoundTime<2000){
+            console.log('[DevDNA v1.0] Ping debounced (5+ in 2s) - skipping sound, badge still updates');
+            return;
+        }
+    }
+    // PART 1: Verify ping.mp3 loading with cache-busting + error listener + catch
+    if(chatPreferences.playSound===false){
+        console.log('[DevDNA v1.0] Ping sound muted by preferences');
+        return;
+    }
+    if(!pingAudio){
+        try{
+            pingAudio=new Audio('audio/ping.mp3?v=1');
+            pingAudio.preload='auto';
+            pingAudio.volume=0.15;
+            pingAudio.addEventListener('error', (e)=>{
+                console.warn('[DevDNA v1.0] Ping audio failed to load:', e);
+            });
+            try{ pingAudio.load(); }catch{}
+        }catch(e){
+            console.warn('[DevDNA v1.0] Failed to create pingAudio', e);
+            return;
+        }
+    }
+    // PART 3: Check userInteracted flag for autoplay compliance
+    if(!userInteractedAdmin){
+        console.log('[DevDNA v1.0] Audio blocked - no user interaction yet, queuing ping');
+        pendingPingsQueue.push(pingData);
+        // If queue grows too large, trim
+        if(pendingPingsQueue.length>10) pendingPingsQueue.shift();
+        return;
+    }
+    if(chatPreferences.playSound && pingAudio){
+        try{
+            pingAudio.currentTime=0;
+            pingAudio.volume=0.15;
+            const p=pingAudio.play();
+            if(p&&p.catch){
+                p.catch((err)=>{
+                    console.warn('[DevDNA v1.0] Ping play blocked (autoplay policy):', err.message);
+                    // Queue for after next interaction
+                    pendingPingsQueue.push(pingData);
+                });
+            }
+            lastPingSoundTime=now;
+            console.log('[DevDNA v1.0] Ping sound played for', pingData?.senderName||'unknown');
+        }catch(e){
+            console.warn('[DevDNA v1.0] Ping play failed:', e);
+        }
+    }
+    // Also try global SFX as fallback
+    try{ window.__DevDNA?.playSFX?.('ping'); }catch{}
+}
+
+function notifyAdmin(pingData){
+    console.log('[DevDNA v1.0] notifyAdmin called', pingData);
+    // PART 2: Self-ping detection fixed - do NOT exclude current user, self-pings should play
+    // PART 4: Three channels independently toggleable
+
+    // 1. Badge - already handled in subscription, but ensure pulse animation (handled there)
+
+    // 2. Sound (with debounce, autoplay check, volume, cache-bust, error handling)
+    playPingSoundWithDebounce(pingData);
+
+    // 3. Toast (if enabled)
+    if(chatPreferences.showToasts!==false){
+        showPingToast(pingData);
+    }
+
+    // 4. Browser Notification API (if permission granted and tab not focused)
+    try{
+        if('Notification' in window && Notification.permission==='granted'){
+            if(document.hidden){
+                const notif=new Notification(`💬 New ping from ${pingData.senderName}`, {
+                    body: `in #${pingData.channelId}: "${(pingData.content||'').slice(0,80)}"`,
+                    icon: '/assets/.gitkeep', // fallback
+                    tag: `devdna-ping-${pingData.id||Date.now()}`,
+                    requireInteraction: false
+                });
+                notif.onclick=()=>{
+                    window.focus();
+                    document.querySelector('[data-tab="chat"]')?.click();
+                    notif.close();
+                };
+                setTimeout(()=>notif.close(), 5000);
+            }
+        }
+    }catch(e){ console.warn('[DevDNA v1.0] OS notification failed', e); }
 }
 
 function showPingToast(ping){
