@@ -172,16 +172,39 @@ const DOM = {
     profileBackBtn: document.getElementById('profile-back-btn')
 };
 
-// SOUND
-const SOUND_FILES = { click:'audio/click.mp3', select:'audio/select.mp3', complete:'audio/complete.mp3', reveal:'audio/reveal.mp3', error:'audio/select.mp3', ping:'audio/reveal.mp3' };
+// SOUND - FIX 5: Cache-busting ?v=1, error handling silent fail, only loads after user interaction
+const SOUND_FILES = { click:'audio/click.mp3?v=1', select:'audio/select.mp3?v=1', complete:'audio/complete.mp3?v=1', reveal:'audio/reveal.mp3?v=1', error:'audio/select.mp3?v=1', ping:'audio/reveal.mp3?v=1' };
 let audioElements = {};
 let lastSFXTime = {};
+let audioInitialized = false;
+let userInteracted = false;
+function ensureAudioInitialized(){
+    if(audioInitialized) return;
+    Object.keys(SOUND_FILES).forEach(key=>{
+        try{
+            const a=new Audio();
+            a.src=SOUND_FILES[key];
+            a.preload='auto';
+            a.volume=0.15;
+            a.crossOrigin='anonymous';
+            a.addEventListener('error', ()=>{ console.warn(`[DevDNA v1.0] Audio load failed (silent): ${key}`); });
+            audioElements[key]=a;
+            try{ a.load(); }catch(e){ /* silent fail for cache error */ }
+        }catch(e){ console.warn('[DevDNA v1.0] Audio init failed', key, e); }
+    });
+    audioInitialized=true;
+}
 function initSound(){
     try{ const saved=localStorage.getItem('devdna_sound_enabled'); soundEnabled = saved===null ? true : saved==='true'; }catch{ soundEnabled=true; }
     updateSoundIcon();
-    Object.keys(SOUND_FILES).forEach(key=>{
-        const a=new Audio(); a.src=SOUND_FILES[key]; a.preload='auto'; a.volume=0.15; a.crossOrigin='anonymous'; audioElements[key]=a; a.load();
-    });
+    const markInteract = ()=>{
+        if(!userInteracted){
+            userInteracted=true;
+            ensureAudioInitialized();
+        }
+    };
+    document.addEventListener('click', markInteract, {once:false});
+    document.addEventListener('keydown', markInteract, {once:true});
     DOM.soundToggle?.addEventListener('click', toggleSound);
     document.addEventListener('click', (e)=>{
         const target = e.target.closest('button, .option-card, .sidebar-tab');
@@ -200,12 +223,24 @@ function updateSoundIcon(){
 }
 function playSFX(name){
     if(!soundEnabled) return;
+    if(!userInteracted){
+        userInteracted=true;
+        ensureAudioInitialized();
+    }
     const now=Date.now(); const last=lastSFXTime[name]||0;
     if(now-last < 120) return;
     lastSFXTime[name]=now;
-    const a=audioElements[name];
-    if(!a) return;
-    try{ a.currentTime=0; const p=a.play(); if(p&&p.catch) p.catch(()=>{}); }catch{}
+    let a=audioElements[name];
+    if(!a){
+        ensureAudioInitialized();
+        a=audioElements[name];
+        if(!a) return;
+    }
+    try{
+        a.currentTime=0;
+        const p=a.play();
+        if(p&&p.catch) p.catch(()=>{ /* silent fail for cache error */ });
+    }catch(e){ /* silent */ }
 }
 
 // Backgrounds
@@ -452,15 +487,18 @@ function startQuiz(){
     if(!currentSettings.eventLive){ showLocked(); return; }
     playSFX('complete');
     currentIndex=0; scores={frontend:0,backend:0,fullstack:0,debugging:0,ai:0,security:0,cloud:0,game:0,mobile:0,data:0};
-    // Generate new random 12 from 40 pool
+    // Generate new random 12 from 40 pool - FIX 2 full requirement
     quizSessionQuestions = generateQuizSession(QUIZ_QUESTIONS);
     console.log(`[DevDNA v1.0] Quiz session: 12 random from ${QUIZ_QUESTIONS.length} pool`);
-    // FIX 2: Ensure only quiz visible, hide all other sections (result, leaderboard, profile, etc.)
+    // FIX 2: Ensure only quiz visible, hide ALL sections, show ONLY quiz full width - clear hash without triggering router
+    try{ history.replaceState(null,'',location.pathname); }catch{}
     hideAllSections();
     setTimeout(()=>{
         DOM.quiz.style.display='block';
         void DOM.quiz.offsetWidth;
         DOM.quiz.classList.add('active');
+        // Ensure result is definitely hidden
+        if(DOM.result){ DOM.result.style.display='none'; DOM.result.classList.remove('active'); }
         renderQuestion(currentIndex);
         updateBannerVisibility();
     },80);
