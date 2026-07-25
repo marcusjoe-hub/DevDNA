@@ -80,10 +80,15 @@ async function renderProfile(gmail){
     // History paginated
     renderHistoryPage(user, 0);
 
-    // Bind buttons
+    // Bind buttons - FIX 2: Retake Quiz Shows Landing Page With Quiz Visible Together
     document.getElementById('profile-retake-btn')?.addEventListener('click', ()=>{
         try{ window.__DevDNA?.playSFX?.('click'); }catch{}
-        location.hash = '';
+        // FIX 2: Retake should show ONLY quiz, not landing + quiz together — clear hash without triggering router, hide profile, dispatch retake
+        try{ history.replaceState(null,'',location.pathname); }catch{}
+        const profileSection = document.getElementById('profile-section');
+        if(profileSection){ profileSection.style.display='none'; profileSection.classList.remove('active'); }
+        // Ensure ALL sections hidden before quiz — startQuiz does hideAllSections but also do here for safety
+        document.querySelectorAll('.section').forEach(s=>{ s.style.display='none'; s.classList.remove('active'); });
         document.dispatchEvent(new CustomEvent('devdna-retake'));
     });
     document.getElementById('profile-delete-btn')?.addEventListener('click', async ()=>{
