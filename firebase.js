@@ -729,6 +729,20 @@ export async function updateAdminLastSeen(gmail){
         const admins=getFallbackAdmins(); const a=admins.find(x=>sanitizeGmail(x.gmail)===id); if(a){ a.lastSeen=now; setFallbackAdmins(admins); }
     }
 }
+export async function updateChatPreferences(gmail, prefs){
+    const id=sanitizeGmail(gmail);
+    if(firebaseInitialized){
+        try{ await updateDoc(doc(db,'admins',id),{chatPreferences:prefs, updatedAt:Date.now()}); }catch(e){ console.warn('updateChatPreferences failed',e); }
+    }else{
+        const admins=getFallbackAdmins();
+        const a=admins.find(x=>sanitizeGmail(x.gmail)===id);
+        if(a){ a.chatPreferences=prefs; setFallbackAdmins(admins); }
+    }
+}
+export async function getChatPreferences(gmail){
+    const admin=await getAdminByGmail(gmail);
+    return admin?.chatPreferences || { playSound:true, showToasts:true, showBadges:true };
+}
 
 // LEADERBOARD HISTORY & AUTO-CLEAR
 export async function addLeaderboardSnapshot({clearedBy}){
@@ -819,14 +833,35 @@ export async function performAutoClear(clearedBy='auto'){
 }
 export async function checkAutoClear(){
     // Called on app init, checks if nextAutoClearAt passed and not frozen
+    // FIX 6: Audit checkAutoClear -> if now < nextAutoClearAt return; If nextAutoClearAt missing/invalid INITIALIZE to now + days*24*60*60*1000, do NOT immediately fire; After auto-clear update nextAutoClearAt; Log scheduled date
     const settings=await new Promise(res=>{
         let unsub=subscribeToSettings(s=>{ unsub&&unsub(); res(s); });
         setTimeout(()=>{ try{unsub&&unsub();}catch{}; res(getFallbackSettings()); },1500);
     });
-    if(settings.leaderboardFrozen) return;
-    if(settings.leaderboardAutoClearDays==='Never' || settings.leaderboardAutoClearDays==='never') return;
+    if(settings.leaderboardFrozen){
+        console.log('[DevDNA v1.0] Auto-clear frozen — skipping');
+        return;
+    }
+    if(settings.leaderboardAutoClearDays==='Never' || settings.leaderboardAutoClearDays==='never'){
+        console.log('[DevDNA v1.0] Auto-clear disabled (Never)');
+        return;
+    }
     const now=Date.now();
-    if(settings.nextAutoClearAt && now >= settings.nextAutoClearAt){
+    const days = parseInt(settings.leaderboardAutoClearDays) || 10;
+
+    // If nextAutoClearAt missing/invalid, initialize to now + days and do NOT fire immediately
+    if(!settings.nextAutoClearAt || isNaN(settings.nextAutoClearAt) || typeof settings.nextAutoClearAt !== 'number' || settings.nextAutoClearAt <= 0){
+        const next = now + days*24*60*60*1000;
+        console.log(`[DevDNA v1.0] Auto-clear scheduled for ${new Date(next).toLocaleString()} (initialized, was missing/invalid)`);
+        try{ await updateLeaderboardSettings({nextClearAt: next}); }catch(e){ console.warn('[DevDNA v1.0] Failed to init nextAutoClearAt', e); }
+        return;
+    }
+
+    const nextDate = new Date(settings.nextAutoClearAt);
+    console.log(`[DevDNA v1.0] Auto-clear scheduled for ${nextDate.toLocaleString()}`);
+
+    if(now >= settings.nextAutoClearAt){
+        console.log('[DevDNA v1.0] Auto-clear due — performing');
         await performAutoClear('auto');
     }
 }
