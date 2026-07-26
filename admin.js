@@ -188,6 +188,7 @@ let editingQuestionId=null;
 let deletingQuestionId=null;
 let editingAdminGmail=null;
 let selectedUserGmail=null;
+let effectiveOwnerGmail=null; // Security overhaul: owner Gmail from Firestore /settings/main/ownerGmail
 let questionsUnsub=null, adminsUnsub=null, leaderboardUnsub=null, settingsUnsub=null, activityUnsub=null, usersUnsub=null, historyUnsub=null, chatChannelsUnsub=null, unreadUnsub=null;
 let modalHandlersInitialized=false;
 // PART 3: Render debouncing/deduplication to stop console spam
@@ -230,7 +231,22 @@ const ARCHETYPES = {
 function playClick(){ try{ window.__DevDNA?.playSFX?.('click'); }catch{} }
 function getRoleEmoji(role){ if(role==='owner')return'👑'; if(role==='administrator')return'⚡'; return'🛡️'; }
 function getRoleBadgeClass(role){ if(role==='owner')return'owner'; if(role==='administrator')return'administrator'; return'admin'; }
-function isOwnerGmail(gmail){ return gmail?.toLowerCase()===OWNER_CONFIG.gmail.toLowerCase(); }
+function isOwnerGmail(gmail){
+    if(!gmail) return false;
+    const lower = gmail.toLowerCase();
+    // Check effective owner from Firestore if available
+    if(effectiveOwnerGmail && lower===effectiveOwnerGmail.toLowerCase()) return true;
+    // Fallback to OWNER_CONFIG only if not migrated
+    if(OWNER_CONFIG.gmail !== 'MIGRATED_TO_FIRESTORE' && !OWNER_CONFIG._deprecated){
+        if(lower===OWNER_CONFIG.gmail.toLowerCase()) return true;
+    }
+    return false;
+}
+function getEffectiveOwnerGmail(){
+    if(effectiveOwnerGmail) return effectiveOwnerGmail;
+    if(OWNER_CONFIG.gmail !== 'MIGRATED_TO_FIRESTORE' && !OWNER_CONFIG._deprecated) return OWNER_CONFIG.gmail;
+    return effectiveOwnerGmail || OWNER_CONFIG.gmail;
+}
 function userCan(permId){
     if(!currentAdmin) return false;
     if(currentAdmin.role==='owner') return true;
@@ -510,6 +526,11 @@ async function initDashboard(){
             if(DOM.autoclearInterval) DOM.autoclearInterval.value=settings.leaderboardAutoClearDays||10;
             if(DOM.nextClearTime) DOM.nextClearTime.textContent=settings.nextAutoClearAt?new Date(settings.nextAutoClearAt).toLocaleString():'Never';
             if(DOM.freezeToggle) DOM.freezeToggle.checked=!!settings.leaderboardFrozen;
+            // Security overhaul: cache effective owner Gmail from Firestore
+            if(settings.ownerGmail){
+                effectiveOwnerGmail = settings.ownerGmail;
+                console.log('[DevDNA v1.0] Effective owner Gmail from Firestore:', effectiveOwnerGmail);
+            }
             updateAutoclearCountdown(settings);
         });
     });
@@ -1325,7 +1346,7 @@ function canModifyUser(actor, targetUser){
     if(!actor || !targetUser) return {allowed:false, reason:'Invalid'};
     const actorGmail = actor.gmail.toLowerCase();
     const targetGmail = targetUser.gmail.toLowerCase();
-    const ownerGmail = OWNER_CONFIG.gmail.toLowerCase();
+    const ownerGmail = (effectiveOwnerGmail || OWNER_CONFIG.gmail).toLowerCase();
 
     if(actorGmail === targetGmail) return {allowed:false, reason:'You cannot modify yourself'};
     if(targetGmail === ownerGmail) return {allowed:false, reason:'Cannot modify the OWNER'};
