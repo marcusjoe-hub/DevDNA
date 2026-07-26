@@ -190,6 +190,29 @@ let editingAdminGmail=null;
 let selectedUserGmail=null;
 let questionsUnsub=null, adminsUnsub=null, leaderboardUnsub=null, settingsUnsub=null, activityUnsub=null, usersUnsub=null, historyUnsub=null, chatChannelsUnsub=null, unreadUnsub=null;
 let modalHandlersInitialized=false;
+// PART 3: Render debouncing/deduplication to stop console spam
+let lastAdminHash=null;
+let renderDebounceTimer=null;
+let lastUsersHash=null;
+let usersRenderTimer=null;
+let lastMembersHash=null;
+let membersRenderTimer=null;
+
+function hashAdmins(admins){
+    try{
+        return admins.map(a => `${a.gmail}|${a.role}|${a.displayAsOwner}|${a.displayName}|${JSON.stringify(a.permissions)}`).sort().join('||');
+    }catch{ return Date.now().toString(); }
+}
+function scheduleRenderAdmins(admins){
+    const newHash=hashAdmins(admins);
+    if(newHash===lastAdminHash){
+        console.log('[DevDNA v1.0] Skipping duplicate admin render');
+        return;
+    }
+    lastAdminHash=newHash;
+    clearTimeout(renderDebounceTimer);
+    renderDebounceTimer=setTimeout(()=>renderAdmins(admins), 100);
+}
 
 const ARCHETYPES = {
     frontend:{name:'Frontend Wizard',emoji:'🎨',color:'#00ccff'},
@@ -233,6 +256,26 @@ function canModifyAdmin(actor, target){
         if(target.role!=='admin') return false;
         return true;
     }
+    return false;
+}
+
+function canViewPassword(currentAdmin, targetAdmin){
+    console.log('[DevDNA v1.0] Password view attempt by:', currentAdmin?.role, currentAdmin?.gmail, 'target:', targetAdmin?.gmail, targetAdmin?.role);
+    if(!currentAdmin || !targetAdmin) return false;
+    // Cannot view own password (already knows it)
+    if(currentAdmin.gmail.toLowerCase()===targetAdmin.gmail.toLowerCase()) return false;
+    // OWNER sees everyone's password
+    if(currentAdmin.role==='owner') return true;
+    // ADMINISTRATOR sees ONLY regular admins' passwords
+    if(currentAdmin.role==='administrator'){
+        // Cannot see OWNER's password
+        if(targetAdmin.role==='owner') return false;
+        // Cannot see other Administrators' passwords (equal rank privacy)
+        if(targetAdmin.role==='administrator') return false;
+        // CAN see regular admin passwords
+        if(targetAdmin.role==='admin') return true;
+    }
+    // Regular admins see nothing
     return false;
 }
 function generateHardPassword(){
@@ -332,10 +375,24 @@ function initSidebar(){
             if(content) content.classList.add('active');
             if(window.innerWidth<=900) DOM.sidebar?.classList.add('collapsed');
             // FIX 4: #general Messages Don't Load on First Visit — auto-load default channel when Chat tab opens
+            // PART 2: Clear stuck unread badge after 1 sec if still viewing chat
             if(tab.dataset.tab==='chat'){
                 if(DOM.chatHeader) DOM.chatHeader.textContent=`# ${currentChatChannel}`;
                 if(DOM.chatInput) DOM.chatInput.placeholder=`Message #${currentChatChannel}`;
                 subscribeToCurrentChat();
+                // PART 2: Wait 1 sec then mark as read if still visible
+                setTimeout(()=>{
+                    const chatContent=document.getElementById('tab-chat');
+                    if(chatContent && chatContent.classList.contains('active')){
+                        console.log('[DevDNA v1.0] Chat tab still visible after 1s - auto-clearing pings');
+                        markAllPingsAsRead();
+                    }
+                }, 1000);
+                // PART 2: If initial pings were stuck from previous session and chat tab already open, clear them
+                if(isFirstPingLoad && unreadPings.length>0){
+                    console.log('[DevDNA v1.0] Initial pings loaded while on Chat tab - will auto-clear');
+                    setTimeout(()=>markAllPingsAsRead(), 1500);
+                }
             }
         });
     });
@@ -431,7 +488,15 @@ async function initDashboard(){
     if(questionsUnsub) questionsUnsub();
     questionsUnsub=subscribeToQuestions((qs)=>{ allQuestions=qs; renderQuestions(); renderDashboardStats(); });
     if(adminsUnsub) adminsUnsub();
-    adminsUnsub=subscribeToAdmins((admins)=>{ allAdmins=admins; renderAdmins(); renderDashboardStats(); renderUsers(); renderChatMembers(); });
+    adminsUnsub=subscribeToAdmins((admins)=>{
+        console.log('[DevDNA v1.0] Admins snapshot received:', admins.length);
+        allAdmins=admins;
+        // PART 3: Use debounced render to stop spam
+        scheduleRenderAdmins(admins);
+        renderDashboardStats();
+        renderUsers();
+        renderChatMembers();
+    });
     if(leaderboardUnsub) leaderboardUnsub();
     leaderboardUnsub=subscribeToLeaderboard((counts)=>{ renderLeaderboardStats(counts); renderDashboardStats(counts); });
     if(activityUnsub) activityUnsub();
@@ -526,6 +591,7 @@ async function initDashboard(){
 
     isFirstPingLoad=true;
     unreadUnsub=subscribeToUnreadPings(currentAdmin.gmail, (pings)=>{
+        console.log('[DevDNA v1.0] Unread pings received:', pings.length, 'items');
         const badge=DOM.chatUnreadBadge;
         // PART 2: Self-ping should ALSO trigger - do NOT exclude current user gmail
         // PART 4: Update document.title with unread count, badge handling with preferences
@@ -951,15 +1017,19 @@ async function saveQuestion(){
 }
 
 // Admins with fake owner display logic
-function renderAdmins(){
+function renderAdmins(overrideAdmins=null){
+    const renderStart=Date.now();
+    console.log('[DevDNA v1.0] renderAdmins called at', new Date().toISOString());
+    // PART 2: Use override or global allAdmins
+    const adminsToRender = overrideAdmins || allAdmins;
     if(!DOM.adminsList) return;
-    console.log('[DevDNA v1.0] Rendering admins:', allAdmins.length, allAdmins);
+    console.log('[DevDNA v1.0] Rendering admins:', adminsToRender.length, adminsToRender);
     if(allAdmins.length===0){
         DOM.adminsList.innerHTML = '<div class="mono" style="padding:20px; text-align:center; color:#ff4d4d; background:rgba(255,77,77,0.08); border-radius:12px; border:1px solid rgba(255,77,77,0.2);">⚠️ No admins found. This should never happen. Check Firebase /admins/ collection.</div>';
         return;
     }
     const search=(DOM.adminSearch?.value||'').toLowerCase();
-    let filtered=[...allAdmins];
+    let filtered=[...adminsToRender];
     if(search){ filtered=filtered.filter(a=>a.gmail.toLowerCase().includes(search)||a.displayName.toLowerCase().includes(search)); }
     // Display order: Real OWNER first, Fake Owners second sorted by createdAt, Administrators next, Admins last
     filtered.sort((a,b)=>{
@@ -1092,10 +1162,23 @@ async function openEditAdminModal(gmail){
     content.innerHTML='';
     const nameRow=document.createElement('div'); nameRow.innerHTML=`<label class="mono" style="font-size:11px;">Display Name</label><input id="edit-admin-displayname" class="admin-input-sm" value="${admin.displayName}">`; content.appendChild(nameRow);
     const passRow=document.createElement('div');
-    if(isCurrentOwner && !isOwnerGmail(admin.gmail)){
-        passRow.innerHTML=`<label class="mono" style="font-size:11px;">Password (OWNER can see)</label><div class="password-field"><input id="edit-admin-password" class="admin-input-sm" type="text" value="${admin.password}" style="padding-right:40px; font-family:var(--font-mono);"><button type="button" class="password-eye" id="toggle-edit-pass">👁️</button></div>`;
+    // PART 4: Rank-based password visibility - centralized canViewPassword
+    const canView = canViewPassword(currentAdmin, admin);
+    if(canView){
+        const viewerRole = currentAdmin.role==='owner' ? 'OWNER' : 'ADMINISTRATOR';
+        passRow.innerHTML=`<label class="mono" style="font-size:11px;">Password (${viewerRole} can see) <span style="margin-left:8px;">👁️ viewable</span></label><div class="password-field" style="display:flex; gap:6px; align-items:center;"><input id="edit-admin-password" class="admin-input-sm" type="password" value="${admin.password}" style="padding-right:40px; font-family:var(--font-mono); flex:1;"><button type="button" class="password-eye" id="toggle-edit-pass">👁️</button><button type="button" class="btn-admin-blue" id="copy-pass-btn" style="padding:4px 8px; font-size:10px;">Copy</button></div><div class="mono" style="font-size:10px; color:var(--neon-green); margin-top:4px;">✅ You can view this password (rank: ${currentAdmin.role} > ${admin.role})</div>`;
+        // Log view for accountability
+        try{
+            const modPromise=import('./firebase.js').then(mod=>{
+                mod.addActivityLog({gmail:currentAdmin.gmail, displayName:currentAdmin.displayName, role:currentAdmin.role, action:'viewed_password', details:`viewed password for ${admin.displayName} (${admin.role})`});
+            });
+        }catch{}
     } else {
-        passRow.innerHTML=`<label class="mono" style="font-size:11px;">Password</label><input class="admin-input-sm" type="text" value="••••••••" disabled style="letter-spacing:4px;"><div class="mono" style="font-size:10px; color:var(--text-muted);">Only OWNER can view</div>`;
+        const reason = admin.gmail.toLowerCase()===currentAdmin.gmail.toLowerCase() ? 'You cannot view own password' : 
+                      admin.role==='owner' ? 'Cannot view OWNER password (rank protection)' :
+                      admin.role==='administrator' && currentAdmin.role==='administrator' ? 'Cannot view equal-rank Administrator (privacy)' :
+                      'Only OWNER/ADMINISTRATOR can view regular admin passwords';
+        passRow.innerHTML=`<label class="mono" style="font-size:11px;">Password <span style="margin-left:8px;">🔒 locked</span></label><div class="password-field"><input class="admin-input-sm" type="text" value="••••••••" disabled style="letter-spacing:4px; opacity:0.7;"><button type="button" class="password-eye" disabled style="opacity:0.3; cursor:not-allowed;">🔒</button></div><div class="mono" style="font-size:10px; color:var(--text-muted); margin-top:4px;" title="${reason}">🔒 ${reason}</div>`;
     }
     content.appendChild(passRow);
 
@@ -1131,9 +1214,45 @@ async function openEditAdminModal(gmail){
 
     const eyeBtn=content.querySelector('#toggle-edit-pass');
     const passInput=content.querySelector('#edit-admin-password');
-    if(eyeBtn && passInput){
-        let visible=true;
-        eyeBtn.addEventListener('click',()=>{ playClick(); visible=!visible; passInput.type=visible?'text':'password'; eyeBtn.textContent=visible?'👁️':'🙈'; });
+    if(eyeBtn && passInput && !eyeBtn.disabled){
+        let visible=passInput.type!=='password';
+        eyeBtn.addEventListener('click',()=>{
+            playClick();
+            visible=!visible;
+            passInput.type=visible?'text':'password';
+            eyeBtn.textContent=visible?'🙈':'👁️';
+            if(visible){
+                // Log view
+                try{
+                    import('./firebase.js').then(mod=>{
+                        mod.addActivityLog({gmail:currentAdmin.gmail, displayName:currentAdmin.displayName, role:currentAdmin.role, action:'viewed_password', details:`revealed password for ${admin.displayName} via eye toggle`});
+                    });
+                }catch{}
+            }
+        });
+    }
+    const copyBtn=content.querySelector('#copy-pass-btn');
+    if(copyBtn && passInput){
+        copyBtn.addEventListener('click',()=>{
+            playClick();
+            try{
+                navigator.clipboard.writeText(passInput.value).then(()=>{
+                    copyBtn.textContent='✓ Copied';
+                    setTimeout(()=>copyBtn.textContent='Copy', 1500);
+                }).catch(()=>{
+                    // Fallback
+                    passInput.type='text';
+                    passInput.select();
+                    document.execCommand('copy');
+                    copyBtn.textContent='✓ Copied';
+                    setTimeout(()=>copyBtn.textContent='Copy', 1500);
+                });
+            }catch{
+                passInput.type='text';
+                passInput.select();
+                try{ document.execCommand('copy'); }catch{}
+            }
+        });
     }
 
     DOM.editAdminTitle.textContent=`Edit — ${admin.displayName} ${getRoleEmoji(admin.role)}`;
@@ -1161,6 +1280,18 @@ async function handleEditAdminSave(){
 
     if(newRole!==admin.role && currentAdmin?.role!=='owner'){ alert('Only OWNER can change role'); return; }
 
+    // PART 4: Administrator cannot change other Administrators' passwords, cannot edit OWNER
+    if(currentAdmin.role==='administrator'){
+        if(admin.role==='owner'){
+            alert('Cannot edit OWNER (rank protection)');
+            return;
+        }
+        if(admin.role==='administrator' && admin.gmail.toLowerCase()!==currentAdmin.gmail.toLowerCase()){
+            alert('Cannot edit other ADMINISTRATOR (equal-rank privacy)');
+            return;
+        }
+    }
+
     let newPerms=admin.permissions;
     const permsContainer=document.getElementById('edit-perms-container');
     if(permsContainer){
@@ -1174,7 +1305,14 @@ async function handleEditAdminSave(){
     try{
         DOM.editAdminSave.disabled=true; DOM.editAdminSave.textContent='SAVING...';
         const updates={displayName:newDisplayName, role:isAdminToggle?'administrator':newRole, permissions:newPerms, displayAsOwner: currentAdmin.role==='owner' ? displayAsOwner : admin.displayAsOwner};
-        if(newPassword && currentAdmin?.role==='owner' && newPassword!=='••••••••'){ updates.password=newPassword; }
+        // PART 4: Password change allowed if canViewPassword or owner
+        const canViewPw = canViewPassword(currentAdmin, admin);
+        if(newPassword && newPassword!=='••••••••' && (canViewPw || currentAdmin.role==='owner')){
+            // Additional check: if admin is trying to change own password, allow if they know current? For now allow owner+admin viewing regular admins
+            if(currentAdmin.role==='owner' || (currentAdmin.role==='administrator' && admin.role==='admin')){
+                updates.password=newPassword;
+            }
+        }
         await updateAdmin(editingAdminGmail, updates);
         await logActivity('edited admin',`${editingAdminGmail} — role:${updates.role}${displayAsOwner?' DISPLAY AS OWNER':''}`);
         DOM.editAdminModal.classList.add('hidden'); editingAdminGmail=null;
@@ -1322,6 +1460,35 @@ function notifyAdmin(pingData){
             }
         }
     }catch(e){ console.warn('[DevDNA v1.0] OS notification failed', e); }
+}
+
+// PART 2: Fix stuck unread ping badge - clear on Chat tab open
+async function markAllPingsAsRead(){
+    if(!currentAdmin) return;
+    // Check if chat tab is currently visible
+    const chatTabContent=document.getElementById('tab-chat');
+    const isChatVisible=chatTabContent && chatTabContent.classList.contains('active');
+    if(!isChatVisible){
+        console.log('[DevDNA v1.0] Not clearing pings - Chat tab not visible');
+        return;
+    }
+    try{
+        console.log('[DevDNA v1.0] Marking all pings as read for', currentAdmin.gmail);
+        const mod=await import('./firebase.js');
+        await mod.clearAllUnreadPings(currentAdmin.gmail);
+        // Clear local badge
+        const badge=DOM.chatUnreadBadge;
+        if(badge){
+            badge.textContent='0';
+            badge.classList.add('hidden');
+            badge.classList.remove('ping-pulse');
+        }
+        document.title=originalDocTitle;
+        unreadPings=[];
+        console.log('[DevDNA v1.0] All pings cleared, badge reset');
+    }catch(e){
+        console.warn('[DevDNA v1.0] Failed to clear pings', e);
+    }
 }
 
 function showPingToast(ping){
