@@ -114,6 +114,7 @@ const DOM = {
     notfound: document.getElementById('notfound-section'),
     profile: document.getElementById('profile-section'),
     leaderboardPage: document.getElementById('leaderboard-page-section'),
+    ownerSetup: document.getElementById('owner-setup-section'),
     notfoundHash: document.getElementById('notfound-hash'),
     notfoundReturn: document.getElementById('notfound-return'),
     startBtn: document.getElementById('start-btn'),
@@ -764,12 +765,12 @@ async function handleShare(){
 function showToast(){ DOM.toast.classList.remove('hidden'); DOM.toast.classList.add('show'); setTimeout(()=>{ DOM.toast.classList.remove('show'); DOM.toast.classList.add('hidden'); },2500); if(navigator.vibrate) navigator.vibrate(20); }
 
 // Routing + banner visibility + theme
-function hideAllSections(){ [DOM.landing,DOM.quiz,DOM.result,DOM.locked,DOM.admin,DOM.uptime,DOM.notfound,DOM.profile,DOM.leaderboardPage].forEach(s=>{ if(s){ s.style.display='none'; s.classList.remove('active'); } }); }
+function hideAllSections(){ [DOM.landing,DOM.quiz,DOM.result,DOM.locked,DOM.admin,DOM.uptime,DOM.notfound,DOM.profile,DOM.leaderboardPage,DOM.ownerSetup].forEach(s=>{ if(s){ s.style.display='none'; s.classList.remove('active'); } }); }
 
 function shouldShowBanner(){
     const hash=location.hash;
     // Hidden on utility pages
-    const hiddenHashes=['#secret-admin-only','#uptime-ping','#404'];
+    const hiddenHashes=['#secret-admin-only','#uptime-ping','#404','#owner-setup'];
     if(hiddenHashes.includes(hash)) return false;
     // Hidden on any invalid hash that leads to 404
     const validHashes=['',' #',' #landing','#quiz','#result','#profile','#leaderboard',' #leaderboard'.trim()];
@@ -777,6 +778,7 @@ function shouldShowBanner(){
     if(DOM.admin && DOM.admin.classList.contains('active')) return false;
     if(DOM.uptime && DOM.uptime.classList.contains('active')) return false;
     if(DOM.notfound && DOM.notfound.classList.contains('active')) return false;
+    if(DOM.ownerSetup && DOM.ownerSetup.classList.contains('active')) return false;
     // Only show on main pages
     return true;
 }
@@ -818,6 +820,26 @@ function showLeaderboardPage(){
     updateBannerVisibility();
 }
 
+function showOwnerSetupPage(){
+    hideAllSections();
+    if(DOM.ownerSetup){
+        DOM.ownerSetup.style.display='block';
+        void DOM.ownerSetup.offsetWidth;
+        DOM.ownerSetup.classList.add('active');
+    }
+    // Dynamically import owner-setup logic
+    import('./owner-setup.js').then(mod=>{
+        mod.showOwnerSetupPage();
+    }).catch(e=>{
+        console.error('[DevDNA v1.0] Failed to load owner-setup.js', e);
+        const el=document.getElementById('owner-setup-section');
+        if(el){
+            el.innerHTML='<div class="glass-panel" style="padding:20px; text-align:center;">Failed to load setup page: '+e.message+'</div>';
+        }
+    });
+    updateBannerVisibility();
+}
+
 function handleRouter(){
     const hash=location.hash;
     DOM.revealSeq.classList.remove('active');
@@ -825,6 +847,7 @@ function handleRouter(){
     if(hash==='#uptime-ping'){ showUptime(); return; }
     if(hash==='#profile'){ showProfilePage(); return; }
     if(hash==='#leaderboard'){ showLeaderboardPage(); return; }
+    if(hash==='#owner-setup'){ showOwnerSetupPage(); return; }
     if(hash===''||hash==='#'||hash==='#landing'){ showLanding(); return; }
     if(['#quiz','#result'].includes(hash)){ if(DOM.result.classList.contains('active')||DOM.quiz.classList.contains('active')) return; showLanding(); return; }
     if(hash.startsWith('#')){ show404(); } else { showLanding(); }
