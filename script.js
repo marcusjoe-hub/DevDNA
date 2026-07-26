@@ -115,6 +115,7 @@ const DOM = {
     profile: document.getElementById('profile-section'),
     leaderboardPage: document.getElementById('leaderboard-page-section'),
     ownerSetup: document.getElementById('owner-setup-section'),
+    securityAudit: document.getElementById('security-audit-section'),
     notfoundHash: document.getElementById('notfound-hash'),
     notfoundReturn: document.getElementById('notfound-return'),
     startBtn: document.getElementById('start-btn'),
@@ -765,12 +766,12 @@ async function handleShare(){
 function showToast(){ DOM.toast.classList.remove('hidden'); DOM.toast.classList.add('show'); setTimeout(()=>{ DOM.toast.classList.remove('show'); DOM.toast.classList.add('hidden'); },2500); if(navigator.vibrate) navigator.vibrate(20); }
 
 // Routing + banner visibility + theme
-function hideAllSections(){ [DOM.landing,DOM.quiz,DOM.result,DOM.locked,DOM.admin,DOM.uptime,DOM.notfound,DOM.profile,DOM.leaderboardPage,DOM.ownerSetup].forEach(s=>{ if(s){ s.style.display='none'; s.classList.remove('active'); } }); }
+function hideAllSections(){ [DOM.landing,DOM.quiz,DOM.result,DOM.locked,DOM.admin,DOM.uptime,DOM.notfound,DOM.profile,DOM.leaderboardPage,DOM.ownerSetup,DOM.securityAudit].forEach(s=>{ if(s){ s.style.display='none'; s.classList.remove('active'); } }); }
 
 function shouldShowBanner(){
     const hash=location.hash;
     // Hidden on utility pages
-    const hiddenHashes=['#secret-admin-only','#uptime-ping','#404','#owner-setup'];
+    const hiddenHashes=['#secret-admin-only','#uptime-ping','#404','#owner-setup','#security-audit'];
     if(hiddenHashes.includes(hash)) return false;
     // Hidden on any invalid hash that leads to 404
     const validHashes=['',' #',' #landing','#quiz','#result','#profile','#leaderboard',' #leaderboard'.trim()];
@@ -779,6 +780,7 @@ function shouldShowBanner(){
     if(DOM.uptime && DOM.uptime.classList.contains('active')) return false;
     if(DOM.notfound && DOM.notfound.classList.contains('active')) return false;
     if(DOM.ownerSetup && DOM.ownerSetup.classList.contains('active')) return false;
+    if(DOM.securityAudit && DOM.securityAudit.classList.contains('active')) return false;
     // Only show on main pages
     return true;
 }
@@ -827,7 +829,6 @@ function showOwnerSetupPage(){
         void DOM.ownerSetup.offsetWidth;
         DOM.ownerSetup.classList.add('active');
     }
-    // Dynamically import owner-setup logic
     import('./owner-setup.js').then(mod=>{
         mod.showOwnerSetupPage();
     }).catch(e=>{
@@ -840,6 +841,45 @@ function showOwnerSetupPage(){
     updateBannerVisibility();
 }
 
+function showSecurityAuditPage(){
+    // Only OWNER can access - check via admin session or Firebase
+    hideAllSections();
+    if(DOM.securityAudit){
+        DOM.securityAudit.style.display='block';
+        void DOM.securityAudit.offsetWidth;
+        DOM.securityAudit.classList.add('active');
+    }
+    updateBannerVisibility();
+    // Try to run audit via admin module if available
+    import('./admin.js').then(mod=>{
+        // admin.js will handle its own audit button, but we also try to run security audit from here
+        if(window.__DevDNA_Admin && window.__DevDNA_Admin.runSecurityAudit){
+            window.__DevDNA_Admin.runSecurityAudit();
+        }
+    }).catch(()=>{});
+    // Also try to run audit via firebase helpers
+    import('./firebase.js').then(async fb=>{
+        const resultsEl=document.getElementById('security-audit-results');
+        if(!resultsEl) return;
+        resultsEl.innerHTML='<div class="mono" style="font-size:11px;">Running audit via main page...</div>';
+        try{
+            const allAdmins = await fb.getAllAdmins();
+            const isHashed = (pwd)=>/^[a-f0-9]{64}$/i.test(pwd);
+            const hashedCount = allAdmins.filter(a=>isHashed(a.password)).length;
+            resultsEl.innerHTML=`
+                <div class="admin-card glass-panel" style="padding:12px; border:1px solid ${hashedCount===allAdmins.length?'rgba(0,255,153,0.35)':'rgba(255,77,77,0.35)'};">
+                    <div style="display:flex; justify-content:space-between;"><span>🔒 Passwords hashed</span><span style="color:${hashedCount===allAdmins.length?'#00ff99':'#ff4d4d'};">${hashedCount}/${allAdmins.length} ${hashedCount===allAdmins.length?'✅':'❌'}</span></div>
+                </div>
+                <div class="admin-card glass-panel" style="padding:12px;"><div>🔒 Firestore rules: MANUAL CHECK required (open console and try unauthenticated write)</div><div class="mono" style="font-size:10px; color:var(--text-muted); margin-top:4px;">Try: import('./firebase.js').then(m=>m.getAllAdmins()) without auth → should FAIL with permission-denied</div></div>
+                <div class="admin-card glass-panel" style="padding:12px;"><div>🔒 OWNER_CONFIG migrated: ${fb.OWNER_CONFIG?.gmail==='MIGRATED_TO_FIRESTORE'?'✅ YES':'❌ NO (still in code)'}</div></div>
+            `;
+        }catch(e){
+            resultsEl.innerHTML=`<div class="admin-card glass-panel" style="padding:12px; color:#ff4d4d;">Audit failed: ${e.message}</div>`;
+        }
+    });
+}
+
+
 function handleRouter(){
     const hash=location.hash;
     DOM.revealSeq.classList.remove('active');
@@ -848,6 +888,7 @@ function handleRouter(){
     if(hash==='#profile'){ showProfilePage(); return; }
     if(hash==='#leaderboard'){ showLeaderboardPage(); return; }
     if(hash==='#owner-setup'){ showOwnerSetupPage(); return; }
+    if(hash==='#security-audit'){ showSecurityAuditPage(); return; }
     if(hash===''||hash==='#'||hash==='#landing'){ showLanding(); return; }
     if(['#quiz','#result'].includes(hash)){ if(DOM.result.classList.contains('active')||DOM.quiz.classList.contains('active')) return; showLanding(); return; }
     if(hash.startsWith('#')){ show404(); } else { showLanding(); }
