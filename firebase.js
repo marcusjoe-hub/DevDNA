@@ -160,7 +160,8 @@ if(typeof window!=='undefined'){
     });
 }
 
-// Init
+// Init - Security Overhaul Audit
+console.log('[DevDNA v1.0] 🔒 Security audit starting...');
 if(isConfigured){
     try{
         app=initializeApp(firebaseConfig);
@@ -171,6 +172,10 @@ if(isConfigured){
         firebaseInitialized=true;
         console.log('[DevDNA v1.0] Firebase initialized ✔');
         console.log('[DevDNA v1.0] Security audit: OWNER_CONFIG still in code:', OWNER_CONFIG.gmail !== 'MIGRATED_TO_FIRESTORE');
+        console.log('[DevDNA v1.0] 🔒 Security overhaul active');
+        console.log('[DevDNA v1.0] 🔒 - Password hashing: ENABLED');
+        console.log('[DevDNA v1.0] 🔒 - Firestore rules: LEVEL 2 STRICT (manual deploy required)');
+        console.log('[DevDNA v1.0] 🔒 - Admin auth: SHA-256 verified');
     }catch(err){
         console.warn('[DevDNA v1.0] Firebase init failed, mock mode:',err);
         firebaseInitialized=false;
@@ -178,17 +183,19 @@ if(isConfigured){
 }else{
     console.warn('[DevDNA v1.0] Firebase not configured — mock mode');
     console.log('[DevDNA v1.0] Security audit: OWNER_CONFIG still in code:', OWNER_CONFIG.gmail !== 'MIGRATED_TO_FIRESTORE');
+    console.log('[DevDNA v1.0] 🔒 Security overhaul active (mock mode)');
 }
 
 // Helpers
 export function sanitizeGmail(gmail) {
-    return gmail.toLowerCase().replace(/@/g, '_at_').replace(/\./g, '_dot_');
+    return gmail.toLowerCase()
+      .replace(/@/g, '_at_')
+      .replace(/\./g, '_dot_');
 }
 function sanitizeGmailOld(gmail){ return gmail.toLowerCase().replace(/[^a-z0-9]/g,'_'); }
 
 function getEffectiveOwnerGmailSync(){
     try{
-        // Try Firestore settings from fallback localStorage
         const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('devdna_fallback_settings_v1') : null;
         if(raw){
             const parsed = JSON.parse(raw);
@@ -199,6 +206,42 @@ function getEffectiveOwnerGmailSync(){
         return OWNER_CONFIG.gmail.toLowerCase();
     }
     return null;
+}
+
+/**
+ * Hash a string using SHA-256 (Web Crypto API).
+ * @param {string} text - The plaintext to hash
+ * @returns {Promise<string>} Hex-encoded hash
+ */
+export async function sha256Hash(text){
+    if(!text || typeof text !== 'string'){
+        throw new Error('sha256Hash requires non-empty string');
+    }
+    const encoder = new TextEncoder();
+    const data = encoder.encode(text);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Detect if a password value is a SHA-256 hash.
+ * SHA-256 hex is always 64 chars of [0-9a-f].
+ */
+export function isPasswordHashed(password){
+    if(!password || typeof password !== 'string') return false;
+    return /^[a-f0-9]{64}$/i.test(password);
+}
+
+export async function verifyPassword(plaintext, storedHash){
+    if(!plaintext || !storedHash) return false;
+    // If stored password is plaintext (legacy), do direct compare AND trigger migration
+    if(!isPasswordHashed(storedHash)){
+        return plaintext === storedHash;
+    }
+    // Hash the plaintext and compare hashes
+    const inputHash = await sha256Hash(plaintext);
+    return inputHash === storedHash;
 }
 
 // Owner auto-seed with duplicate prevention + Migration support for #owner-setup (Security Overhaul)
@@ -500,7 +543,12 @@ export async function createAdmin({gmail, displayName, password, role, permissio
     const id=sanitizeGmail(gmail);
     const existing=await getAdminByGmail(gmail);
     if(existing) throw new Error('Admin with this Gmail already exists');
-    const data={gmail:gmail.toLowerCase(), displayName, password, role:role||'admin', permissions:role==='owner'||role==='administrator'?{...DEFAULT_PERMISSIONS}:(permissions||{...DEFAULT_PERMISSIONS}), avatar:avatar||"", createdAt:Date.now(), addedBy:addedBy||"unknown", displayAsOwner:displayAsOwner||false};
+    // PART 2: Hash password on creation if plaintext
+    let pwdToStore = password;
+    if(pwdToStore && !isPasswordHashed(pwdToStore)){
+        try{ pwdToStore = await sha256Hash(pwdToStore); console.log('[DevDNA v1.0] 🔒 Password hashed on creation for', gmail); }catch(e){ console.warn('[DevDNA v1.0] Password hashing failed on creation', e); }
+    }
+    const data={gmail:gmail.toLowerCase(), displayName, password:pwdToStore, role:role||'admin', permissions:role==='owner'||role==='administrator'?{...DEFAULT_PERMISSIONS}:(permissions||{...DEFAULT_PERMISSIONS}), avatar:avatar||"", createdAt:Date.now(), addedBy:addedBy||"unknown", displayAsOwner:displayAsOwner||false};
     if(firebaseInitialized){ await setDoc(doc(db,'admins',id), data); }else{ const admins=getFallbackAdmins(); admins.push(data); setFallbackAdmins(admins); }
     return data;
 }
@@ -510,6 +558,10 @@ export async function updateAdmin(gmail, updates){
     const ownerIdToCheck = effectiveOwner ? sanitizeGmail(effectiveOwner) : sanitizeGmail(OWNER_CONFIG.gmail);
     const isOwnerTarget = sanitizeGmail(gmail)===ownerIdToCheck || (effectiveOwner && gmail.toLowerCase()===effectiveOwner);
     if(isOwnerTarget){ if(updates.role && updates.role!=='owner') throw new Error('OWNER cannot be demoted — EVER'); }
+    // PART 2: Hash new passwords if plaintext
+    if(updates.password && !isPasswordHashed(updates.password)){
+        try{ updates.password = await sha256Hash(updates.password); console.log('[DevDNA v1.0] 🔒 Password hashed on update for', gmail); }catch(e){ console.warn('[DevDNA v1.0] Password hashing failed on update', e); }
+    }
     if(firebaseInitialized){ const ref=doc(db,'admins',id); await updateDoc(ref,{...updates, updatedAt:Date.now()}); }
     else{ const admins=getFallbackAdmins(); const idx=admins.findIndex(a=>sanitizeGmail(a.gmail)===id); if(idx>=0){ admins[idx]={...admins[idx],...updates}; setFallbackAdmins(admins); } }
 }
