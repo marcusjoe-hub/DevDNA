@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // ======= HELPER FUNCTIONS =======
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserEmail() {
+      return request.auth.token.email.lower();
+    }
+    
+    function sanitizeEmail(email) {
+      return email.lower().replace('@', '_at_').replace('.', '_dot_');
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/admins/$(sanitizeEmail(getUserEmail())));
+    }
+    
+    function getAdminRole() {
+      return get(/databases/$(database)/documents/admins/$(sanitizeEmail(getUserEmail()))).data.role;
+    }
+    
+    function isOwner() {
+      return isAdmin() && getAdminRole() == 'owner';
+    }
+    
+    function isAdministrator() {
+      return isAdmin() && (getAdminRole() == 'administrator' || getAdminRole() == 'owner');
+    }
+    
+    function hasPermission(perm) {
+      return isAdmin() && 
+        get(/databases/$(database)/documents/admins/$(sanitizeEmail(getUserEmail()))).data.permissions[perm] == true;
+    }
+    
+    // ======= SETTINGS =======
+    match /settings/{doc} {
+      allow read: if true; // Public read for banner/theme
+      allow write: if isAdministrator();
+    }
+    
+    // ======= ANONYMOUS LEADERBOARD =======
+    match /devdna_leaderboard/{doc} {
+      allow read: if true; // Public read for stats display
+      // Public increments allowed via specific field-only updates (quiz submission)
+      allow update: if isAuthenticated() && 
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['frontend', 'backend', 'fullstack', 'debugging', 'ai', 
+                    'security', 'cloud', 'game', 'mobile', 'data', 'total', 'updatedAt']);
+      allow write: if isAdministrator(); // Full write for clears
+    }
+    
+    // ======= QUESTIONS =======
+    match /questions/{doc} {
+      allow read: if true; // Public read for quiz
+      allow write: if isAdministrator();
+    }
+    
+    // ======= USERS =======
+    match /users/{userDoc} {
+      // Users can read/update their own doc
+      allow read: if isAuthenticated() && userDoc == sanitizeEmail(getUserEmail());
+      allow create: if isAuthenticated() && userDoc == sanitizeEmail(getUserEmail());
+      allow update: if isAuthenticated() && userDoc == sanitizeEmail(getUserEmail());
+      
+      // Admins can read all users
+      allow read: if hasPermission('view_users');
+      
+      // Admins can ban/feature/delete
+      allow update, delete: if hasPermission('delete_users') || 
+                               hasPermission('ban_users') || 
+                               hasPermission('manage_leaderboard');
+    }
+    
+    // ======= ADMINS =======
+    match /admins/{adminDoc} {
+      // Own admin can read own doc
+      allow read: if isAuthenticated() && adminDoc == sanitizeEmail(getUserEmail());
+      
+      // All admins can read admin list (for chat members, etc.)
+      allow read: if isAdmin();
+      
+      // Only Owner + Administrator can create/update/delete admins
+      allow create: if isAdministrator();
+      allow update: if isAdministrator();
+      allow delete: if isOwner() || 
+                       (isAdministrator() && resource.data.role == 'admin');
+      
+      // Own admin can update own lastSeen for heartbeat and chatPreferences and password (for mandatory change)
+      allow update: if isAuthenticated() && 
+                       adminDoc == sanitizeEmail(getUserEmail()) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['lastSeen', 'chatPreferences', 'password', 'mustChangePassword', 'passwordResetAt', 'passwordResetBy', 'updatedAt', 'recoveryCodes']);
+    }
+    
+    // ======= ADMIN SUB-COLLECTIONS =======
+    match /admins/{adminDoc}/unread_pings/{pingDoc} {
+      // Admin can read/delete own pings
+      allow read, delete: if isAuthenticated() && adminDoc == sanitizeEmail(getUserEmail());
+      // Admins can create pings (via chat @ mentions)
+      allow create: if isAdmin();
+    }
+    
+    // ======= ACTIVITY LOG =======
+    match /activity_log/{doc} {
+      allow read: if isAdmin();
+      allow create: if isAdmin(); // Append-only, no updates/deletes
+      allow delete: if hasPermission('clear_activity_log');
+    }
+    
+    // ======= LEADERBOARD HISTORY =======
+    match /leaderboard_history/{doc} {
+      allow read: if hasPermission('view_leaderboard_history') || isAdministrator();
+      allow write: if isAdministrator();
+    }
+    
+    // ======= CHAT CHANNELS =======
+    match /chat_channels/{channelDoc} {
+      allow read: if isAdmin() && hasPermission('view_chat');
+      allow create, delete: if isOwner();
+      allow update: if isAdministrator();
+    }
+    
+    match /chat_channels/{channelDoc}/messages/{msgDoc} {
+      allow read: if isAdmin() && hasPermission('view_chat');
+      allow create: if isAdmin() && hasPermission('send_chat');
+      allow update: if isAuthenticated() && 
+                       resource.data.senderGmail == getUserEmail();
+      allow delete: if isAdministrator() || 
+                       (isAuthenticated() && resource.data.senderGmail == getUserEmail());
+    }
+  }
+}
