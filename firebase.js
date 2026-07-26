@@ -22,11 +22,18 @@ const firebaseConfig = {
   measurementId: "G-DX6F6MW85T"
 };
 
+// SECURITY OVERHAUL Part 1-4: Owner credentials moved to Firestore
+// BACKUP PLAN: If setup page breaks, manually create owner in Firebase Console:
+// 1. Firestore → /settings/main → set { ownerSetupComplete: true, ownerGmail: "your@gmail.com" }
+// 2. Firestore → /admins/{sanitized_gmail} → create doc with { gmail, displayName, password, role: "owner", permissions: {...all true}, createdAt: Date.now(), addedBy: "system-setup" }
+// 3. Optional: manually add recoveryCodes array with SHA-256 hashed codes
 export const OWNER_CONFIG = {
-    gmail: "marcusjoe.k@gmail.com",
-    displayName: "Marcus",
-    password: "M@rcus$Owner#2026!ByteCraft9X",
-    role: "owner"
+    gmail: 'MIGRATED_TO_FIRESTORE',
+    displayName: 'MIGRATED_TO_FIRESTORE',
+    password: 'MIGRATED_TO_FIRESTORE',
+    role: 'owner',
+    _deprecated: true,
+    _note: 'Owner credentials moved to /settings/main + /admins/{owner} in Firestore. This constant is kept for backward compatibility only.'
 };
 
 const isConfigured = !Object.values(firebaseConfig).some(v => typeof v === 'string' && v.includes('YOUR_'));
@@ -163,12 +170,14 @@ if(isConfigured){
         setPersistence(auth, browserLocalPersistence).catch(()=>{});
         firebaseInitialized=true;
         console.log('[DevDNA v1.0] Firebase initialized ✔');
+        console.log('[DevDNA v1.0] Security audit: OWNER_CONFIG still in code:', OWNER_CONFIG.gmail !== 'MIGRATED_TO_FIRESTORE');
     }catch(err){
         console.warn('[DevDNA v1.0] Firebase init failed, mock mode:',err);
         firebaseInitialized=false;
     }
 }else{
     console.warn('[DevDNA v1.0] Firebase not configured — mock mode');
+    console.log('[DevDNA v1.0] Security audit: OWNER_CONFIG still in code:', OWNER_CONFIG.gmail !== 'MIGRATED_TO_FIRESTORE');
 }
 
 // Helpers
@@ -177,17 +186,81 @@ export function sanitizeGmail(gmail) {
 }
 function sanitizeGmailOld(gmail){ return gmail.toLowerCase().replace(/[^a-z0-9]/g,'_'); }
 
-// Owner auto-seed with duplicate prevention
+function getEffectiveOwnerGmailSync(){
+    try{
+        // Try Firestore settings from fallback localStorage
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('devdna_fallback_settings_v1') : null;
+        if(raw){
+            const parsed = JSON.parse(raw);
+            if(parsed.ownerGmail) return parsed.ownerGmail.toLowerCase();
+        }
+    }catch{}
+    if(OWNER_CONFIG.gmail !== 'MIGRATED_TO_FIRESTORE' && !OWNER_CONFIG._deprecated){
+        return OWNER_CONFIG.gmail.toLowerCase();
+    }
+    return null;
+}
+
+// Owner auto-seed with duplicate prevention + Migration support for #owner-setup (Security Overhaul)
+// If OWNER_CONFIG is migrated to Firestore (gmail === MIGRATED_TO_FIRESTORE), do NOT auto-seed placeholder
+// Instead, rely on owner's doc already in Firestore created via #owner-setup
 async function ensureOwnerExists(){
-    const currentId = sanitizeGmail(OWNER_CONFIG.gmail);
-    const ownerGmailLower = OWNER_CONFIG.gmail.toLowerCase();
+    // If OWNER_CONFIG is deprecated placeholder, skip seeding unless no owner exists and setup not complete
+    const isMigrated = OWNER_CONFIG.gmail === 'MIGRATED_TO_FIRESTORE' || OWNER_CONFIG._deprecated;
+    const currentId = !isMigrated ? sanitizeGmail(OWNER_CONFIG.gmail) : null;
+    const ownerGmailLower = !isMigrated ? OWNER_CONFIG.gmail.toLowerCase() : null;
+
+    // Check if owner setup complete in Firestore - if yes, do not seed from hardcoded config
+    let ownerSetupComplete = false;
+    let effectiveOwnerGmail = null;
+    try{
+        if(typeof localStorage !== 'undefined'){
+            const fallbackSettings = JSON.parse(localStorage.getItem('devdna_fallback_settings_v1')||'null');
+            if(fallbackSettings && fallbackSettings.ownerSetupComplete){
+                ownerSetupComplete = true;
+                effectiveOwnerGmail = fallbackSettings.ownerGmail || null;
+            }
+        }
+        if(firebaseInitialized){
+            const settingsSnap = await getDoc(doc(db,'settings','main'));
+            if(settingsSnap.exists()){
+                const data = settingsSnap.data();
+                if(data.ownerSetupComplete) ownerSetupComplete = true;
+                if(data.ownerGmail) effectiveOwnerGmail = data.ownerGmail;
+            }
+        }
+    }catch(e){}
+
+    if(ownerSetupComplete){
+        console.log('[DevDNA v1.0] Owner setup complete - skipping auto-seed from OWNER_CONFIG, owner is', effectiveOwnerGmail||'in Firestore');
+        // Still ensure at least one owner exists in Firestore, but don't create placeholder
+        if(firebaseInitialized && effectiveOwnerGmail){
+            try{
+                const col=collection(db,'admins');
+                const snaps=await getDocs(col);
+                let hasOwner=false;
+                snaps.forEach(d=>{ const data=d.data(); if(data.role==='owner') hasOwner=true; });
+                if(!hasOwner){
+                    console.warn('[DevDNA v1.0] Owner setup marked complete but no owner doc found - manual fix needed');
+                }
+            }catch{}
+        }
+        return;
+    }
+
+    if(isMigrated){
+        console.log('[DevDNA v1.0] OWNER_CONFIG migrated to Firestore - skipping placeholder seeding, waiting for #owner-setup');
+        return;
+    }
+
+    // Legacy path: OWNER_CONFIG still contains real gmail (pre-migration)
     if(!firebaseInitialized){
         let admins = getFallbackAdmins();
         const matching = admins.filter(a=>a.role==='owner' && a.gmail.toLowerCase()===ownerGmailLower);
         if(matching.length===0){
             admins.push({gmail: OWNER_CONFIG.gmail, displayName: OWNER_CONFIG.displayName, password: OWNER_CONFIG.password, role:'owner', permissions:{...DEFAULT_PERMISSIONS}, avatar:"", createdAt:Date.now(), addedBy:"system", displayAsOwner:false});
             setFallbackAdmins(admins);
-            console.log('[DevDNA v1.0] Mock owner seeded');
+            console.log('[DevDNA v1.0] Mock owner seeded (legacy)');
         } else if(matching.length>1 || !matching.find(a=>sanitizeGmail(a.gmail)===currentId)){
             const toKeep = matching.find(a=>sanitizeGmail(a.gmail)===currentId) || matching[0];
             const filtered = admins.filter(a=> !(a.role==='owner' && a.gmail.toLowerCase()===ownerGmailLower));
@@ -204,7 +277,7 @@ async function ensureOwnerExists(){
         snaps.forEach(d=>{ const data=d.data(); if(data.role==='owner' && data.gmail && data.gmail.toLowerCase()===ownerGmailLower) owners.push({id:d.id, data}); });
         if(owners.length===0){
             await setDoc(doc(db,'admins',currentId),{gmail:OWNER_CONFIG.gmail, displayName:OWNER_CONFIG.displayName, password:OWNER_CONFIG.password, role:'owner', permissions:{...DEFAULT_PERMISSIONS}, avatar:"", createdAt:Date.now(), addedBy:"system", displayAsOwner:false});
-            console.log('[DevDNA v1.0] Owner auto-seeded:', OWNER_CONFIG.gmail);
+            console.log('[DevDNA v1.0] Owner auto-seeded (legacy):', OWNER_CONFIG.gmail);
         } else {
             const hasCurrent = owners.find(o=>o.id===currentId);
             if(owners.length===1 && hasCurrent) return;
@@ -433,13 +506,18 @@ export async function createAdmin({gmail, displayName, password, role, permissio
 }
 export async function updateAdmin(gmail, updates){
     const id=sanitizeGmail(gmail);
-    if(sanitizeGmail(gmail)===sanitizeGmail(OWNER_CONFIG.gmail)){ if(updates.role && updates.role!=='owner') throw new Error('OWNER cannot be demoted — EVER'); }
+    const effectiveOwner = getEffectiveOwnerGmailSync();
+    const ownerIdToCheck = effectiveOwner ? sanitizeGmail(effectiveOwner) : sanitizeGmail(OWNER_CONFIG.gmail);
+    const isOwnerTarget = sanitizeGmail(gmail)===ownerIdToCheck || (effectiveOwner && gmail.toLowerCase()===effectiveOwner);
+    if(isOwnerTarget){ if(updates.role && updates.role!=='owner') throw new Error('OWNER cannot be demoted — EVER'); }
     if(firebaseInitialized){ const ref=doc(db,'admins',id); await updateDoc(ref,{...updates, updatedAt:Date.now()}); }
     else{ const admins=getFallbackAdmins(); const idx=admins.findIndex(a=>sanitizeGmail(a.gmail)===id); if(idx>=0){ admins[idx]={...admins[idx],...updates}; setFallbackAdmins(admins); } }
 }
 export async function deleteAdmin(gmail){
     const id=sanitizeGmail(gmail);
-    if(sanitizeGmail(gmail)===sanitizeGmail(OWNER_CONFIG.gmail)) throw new Error('OWNER cannot be removed — EVER');
+    const effectiveOwner = getEffectiveOwnerGmailSync();
+    const ownerIdToCheck = effectiveOwner ? sanitizeGmail(effectiveOwner) : sanitizeGmail(OWNER_CONFIG.gmail);
+    if(sanitizeGmail(gmail)===ownerIdToCheck || (effectiveOwner && gmail.toLowerCase()===effectiveOwner)) throw new Error('OWNER cannot be removed — EVER');
     if(firebaseInitialized){ await deleteDoc(doc(db,'admins',id)); }
     else{ const admins=getFallbackAdmins().filter(a=>sanitizeGmail(a.gmail)!==id); setFallbackAdmins(admins); }
 }
@@ -645,11 +723,12 @@ export function subscribeToUsers(cb){
 export async function deleteUser(gmail){
     const id=sanitizeGmail(gmail);
     const lowerTarget=gmail.toLowerCase();
+    const effectiveOwner = getEffectiveOwnerGmailSync() || OWNER_CONFIG.gmail.toLowerCase();
     // FIX 5: Nobody can delete themselves, OWNER, or ADMINISTRATORS unless OWNER
     try{
         const currentEmail = auth?.currentUser?.email?.toLowerCase() || null;
         if(currentEmail && lowerTarget===currentEmail) throw new Error('You cannot delete yourself');
-        if(lowerTarget===OWNER_CONFIG.gmail.toLowerCase()) throw new Error('Cannot modify the OWNER');
+        if(lowerTarget===effectiveOwner) throw new Error('Cannot modify the OWNER');
         // Check if target is admin with role administrator
         const adminDoc = await getAdminByGmail(gmail).catch(()=>null);
         if(adminDoc){
@@ -678,10 +757,11 @@ export async function deleteUser(gmail){
 export async function banUser(gmail, banned=true){
     const id=sanitizeGmail(gmail);
     const lowerTarget=gmail.toLowerCase();
+    const effectiveOwner = getEffectiveOwnerGmailSync() || OWNER_CONFIG.gmail.toLowerCase();
     try{
         const currentEmail = auth?.currentUser?.email?.toLowerCase() || null;
         if(currentEmail && lowerTarget===currentEmail) throw new Error('You cannot ban yourself');
-        if(lowerTarget===OWNER_CONFIG.gmail.toLowerCase()) throw new Error('Cannot modify the OWNER');
+        if(lowerTarget===effectiveOwner) throw new Error('Cannot modify the OWNER');
         const adminDoc = await getAdminByGmail(gmail).catch(()=>null);
         if(adminDoc){
             if(adminDoc.role==='administrator' && currentEmail!==OWNER_CONFIG.gmail.toLowerCase()){
@@ -699,10 +779,11 @@ export async function banUser(gmail, banned=true){
 export async function featureUser(gmail, featured=true){
     const id=sanitizeGmail(gmail);
     const lowerTarget=gmail.toLowerCase();
+    const effectiveOwner = getEffectiveOwnerGmailSync() || OWNER_CONFIG.gmail.toLowerCase();
     try{
         const currentEmail = auth?.currentUser?.email?.toLowerCase() || null;
         if(currentEmail && lowerTarget===currentEmail) throw new Error('You cannot feature yourself');
-        if(lowerTarget===OWNER_CONFIG.gmail.toLowerCase()) throw new Error('Cannot modify the OWNER');
+        if(lowerTarget===effectiveOwner) throw new Error('Cannot modify the OWNER');
     }catch(e){
         if(e.message.includes('Cannot') || e.message.includes('You cannot')){
             throw e;
@@ -863,6 +944,32 @@ export async function checkAutoClear(){
     if(now >= settings.nextAutoClearAt){
         console.log('[DevDNA v1.0] Auto-clear due — performing');
         await performAutoClear('auto');
+    }
+}
+
+export async function checkOwnerSetupStatus(){
+    try{
+        const settingsRef = doc(db, 'settings', 'main');
+        const snap = await getDoc(settingsRef);
+        const complete = snap.exists() && snap.data().ownerSetupComplete === true;
+        console.log('[DevDNA v1.0] Owner setup complete:', complete);
+        return complete;
+    }catch(err){
+        console.warn('[DevDNA v1.0] checkOwnerSetupStatus failed:', err);
+        return false;
+    }
+}
+
+export async function checkInitKeyExists(){
+    try{
+        const settingsRef = doc(db, 'settings', 'main');
+        const snap = await getDoc(settingsRef);
+        const exists = snap.exists() && !!snap.data().ownerInitKey;
+        console.log('[DevDNA v1.0] Init key exists in Firestore:', exists);
+        return exists;
+    }catch(err){
+        console.warn('[DevDNA v1.0] checkInitKeyExists failed:', err);
+        return false;
     }
 }
 
