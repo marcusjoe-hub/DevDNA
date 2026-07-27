@@ -49,6 +49,7 @@ const STORAGE_KEY_ACTIVITY='devdna_fallback_activity_v1';
 const STORAGE_KEY_USERS='devdna_fallback_users_v1';
 const STORAGE_KEY_HISTORY='devdna_fallback_history_v1';
 const STORAGE_KEY_CHAT='devdna_fallback_chat_v1';
+const STORAGE_KEY_ADMIN_LIST='devdna_fallback_admin_list_v1';
 
 const defaultCounts = { frontend:0, backend:0, fullstack:0, debugging:0, ai:0, security:0, cloud:0, game:0, mobile:0, data:0, total:0 };
 const defaultSettings = {
@@ -136,6 +137,8 @@ function getFallbackUsers(){ return getFallback(STORAGE_KEY_USERS, []); }
 function setFallbackUsers(u){ setFallback(STORAGE_KEY_USERS,u); triggerMockUsers(); }
 function getFallbackHistory(){ return getFallback(STORAGE_KEY_HISTORY, []); }
 function setFallbackHistory(h){ setFallback(STORAGE_KEY_HISTORY,h); triggerMockHistory(); }
+function getFallbackAdminList(){ return getFallback(STORAGE_KEY_ADMIN_LIST, {emails:[], ownerEmail:null, administratorEmails:[], updatedAt:Date.now()}); }
+function setFallbackAdminList(list){ setFallback(STORAGE_KEY_ADMIN_LIST, list); }
 
 let mockLeaderboardListeners=[], mockSettingsListeners=[], mockAdminsListeners=[], mockQuestionsListeners=[], mockActivityListeners=[], mockUsersListeners=[], mockHistoryListeners=[], mockChatListeners=[];
 
@@ -176,6 +179,7 @@ if(isConfigured){
         console.log('[DevDNA v1.0] 🔒 - Password hashing: ENABLED');
         console.log('[DevDNA v1.0] 🔒 - Firestore rules: LEVEL 2 STRICT (manual deploy required)');
         console.log('[DevDNA v1.0] 🔒 - Admin auth: SHA-256 verified');
+        console.log('[DevDNA v1.0] 🔒 admin_list sync system: ACTIVE');
     }catch(err){
         console.warn('[DevDNA v1.0] Firebase init failed, mock mode:',err);
         firebaseInitialized=false;
@@ -184,6 +188,7 @@ if(isConfigured){
     console.warn('[DevDNA v1.0] Firebase not configured — mock mode');
     console.log('[DevDNA v1.0] Security audit: OWNER_CONFIG still in code:', OWNER_CONFIG.gmail !== 'MIGRATED_TO_FIRESTORE');
     console.log('[DevDNA v1.0] 🔒 Security overhaul active (mock mode)');
+    console.log('[DevDNA v1.0] 🔒 admin_list sync system: ACTIVE');
 }
 
 // Helpers
@@ -339,6 +344,176 @@ async function ensureOwnerExists(){
     }catch(e){ console.warn('[DevDNA v1.0] ensureOwnerExists failed',e); }
 }
 
+// ===== ADMIN_LIST MAINTENANCE FOR NEW RULES (avoids sanitizeEmail in rules) =====
+// New approach: /settings/admin_list = {emails: [lowercase gmail], ownerEmail, administratorEmails, updatedAt}
+// isAdmin() in rules checks email.lower() in admin_list.emails — NO sanitization needed, avoids dot-replace bug
+
+export async function getAdminList() {
+  try {
+    const ref = doc(db, 'settings', 'admin_list');
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    return snap.data();
+  } catch (err) {
+    console.warn('[DevDNA v1.0] getAdminList failed:', err);
+    return null;
+  }
+}
+
+export async function getAdminListDoc(){
+    if(firebaseInitialized){
+        try{
+            const ref=doc(db,'settings','admin_list');
+            const snap=await getDoc(ref);
+            if(snap.exists()) return snap.data();
+            return null;
+        }catch{ return null; }
+    }else{
+        return getFallbackAdminList();
+    }
+}
+
+export async function rebuildAdminList() {
+  try {
+    const admins = await getAllAdmins();
+    const emails = admins.map(a => a.gmail.toLowerCase());
+    const owner = admins.find(a => a.role === 'owner');
+    const administrators = admins
+      .filter(a => a.role === 'administrator')
+      .map(a => a.gmail.toLowerCase());
+    
+    const data = {
+      emails: emails,
+      ownerEmail: owner ? owner.gmail.toLowerCase() : null,
+      administratorEmails: administrators,
+      updatedAt: Date.now()
+    };
+    
+    if(firebaseInitialized){
+        await setDoc(doc(db, 'settings', 'admin_list'), data);
+    }else{
+        setFallbackAdminList(data);
+    }
+    console.log('[DevDNA v1.0] admin_list rebuilt:', data);
+    return data;
+  } catch (err) {
+    console.error('[DevDNA v1.0] rebuildAdminList failed:', err);
+    throw err;
+  }
+}
+
+export async function ensureAdminListExists() {
+  const list = await getAdminList();
+  if (!list) {
+    console.log('[DevDNA v1.0] admin_list missing — rebuilding...');
+    await rebuildAdminList();
+  }
+}
+
+// Legacy wrappers for existing code that used different names
+export async function initializeAdminListFromExistingAdmins(){
+    return await rebuildAdminList();
+}
+export async function getAdminListDocWrapper(){ return await getAdminList(); }
+
+async function updateAdminListOnCreate(gmail, role){
+    const lower=gmail.toLowerCase();
+    if(firebaseInitialized){
+        try{
+            const ref=doc(db,'settings','admin_list');
+            const snap=await getDoc(ref);
+            let data=snap.exists() ? snap.data() : {emails:[], ownerEmail:null, administratorEmails:[], updatedAt:Date.now()};
+            if(!data.emails.includes(lower)) data.emails.push(lower);
+            if(role==='owner') data.ownerEmail=lower;
+            if(role==='administrator' && !data.administratorEmails.includes(lower)) data.administratorEmails.push(lower);
+            // If role is admin, ensure not in administratorEmails (if previously promoted and demoted)
+            if(role==='admin'){
+                data.administratorEmails=data.administratorEmails.filter(e=>e!==lower);
+                // ownerEmail stays if owner, but owner shouldn't be demoted via create
+            }
+            data.updatedAt=Date.now();
+            await setDoc(ref, data, {merge:true});
+            console.log('[DevDNA v1.0] admin_list updated on create', lower, role);
+        }catch(e){ console.warn('[DevDNA v1.0] updateAdminListOnCreate failed', e); }
+    }else{
+        const list=getFallbackAdminList();
+        if(!list.emails.includes(lower)) list.emails.push(lower);
+        if(role==='owner') list.ownerEmail=lower;
+        if(role==='administrator' && !list.administratorEmails.includes(lower)) list.administratorEmails.push(lower);
+        if(role==='admin') list.administratorEmails=list.administratorEmails.filter(e=>e!==lower);
+        list.updatedAt=Date.now();
+        setFallbackAdminList(list);
+    }
+}
+
+async function updateAdminListOnDelete(gmail){
+    const lower=gmail.toLowerCase();
+    if(firebaseInitialized){
+        try{
+            const ref=doc(db,'settings','admin_list');
+            const snap=await getDoc(ref);
+            if(!snap.exists()) return;
+            const data=snap.data();
+            data.emails=(data.emails||[]).filter(e=>e!==lower);
+            data.administratorEmails=(data.administratorEmails||[]).filter(e=>e!==lower);
+            if(data.ownerEmail===lower) data.ownerEmail=null; // owner deletion should be blocked, but handle
+            data.updatedAt=Date.now();
+            await setDoc(ref, data, {merge:true});
+            console.log('[DevDNA v1.0] admin_list updated on delete', lower);
+        }catch(e){ console.warn('[DevDNA v1.0] updateAdminListOnDelete failed', e); }
+    }else{
+        const list=getFallbackAdminList();
+        list.emails=(list.emails||[]).filter(e=>e!==lower);
+        list.administratorEmails=(list.administratorEmails||[]).filter(e=>e!==lower);
+        if(list.ownerEmail===lower) list.ownerEmail=null;
+        list.updatedAt=Date.now();
+        setFallbackAdminList(list);
+    }
+}
+
+async function updateAdminListOnRoleChange(gmail, oldRole, newRole){
+    const lower=gmail.toLowerCase();
+    if(firebaseInitialized){
+        try{
+            const ref=doc(db,'settings','admin_list');
+            const snap=await getDoc(ref);
+            if(!snap.exists()) return;
+            const data=snap.data();
+            // Update administratorEmails
+            if(oldRole==='administrator' && newRole!=='administrator'){
+                data.administratorEmails=(data.administratorEmails||[]).filter(e=>e!==lower);
+            }
+            if(newRole==='administrator' && !data.administratorEmails.includes(lower)){
+                data.administratorEmails.push(lower);
+            }
+            // Update ownerEmail
+            if(newRole==='owner'){
+                data.ownerEmail=lower;
+            }else if(oldRole==='owner' && newRole!=='owner' && data.ownerEmail===lower){
+                data.ownerEmail=null;
+            }
+            // Ensure emails still contains this gmail (role changes don't remove from emails unless deleted)
+            if(!data.emails.includes(lower)) data.emails.push(lower);
+            data.updatedAt=Date.now();
+            await setDoc(ref, data, {merge:true});
+            console.log('[DevDNA v1.0] admin_list updated on role change', lower, oldRole, '->', newRole);
+        }catch(e){ console.warn('[DevDNA v1.0] updateAdminListOnRoleChange failed', e); }
+    }else{
+        const list=getFallbackAdminList();
+        if(oldRole==='administrator' && newRole!=='administrator'){
+            list.administratorEmails=list.administratorEmails.filter(e=>e!==lower);
+        }
+        if(newRole==='administrator' && !list.administratorEmails.includes(lower)){
+            list.administratorEmails.push(lower);
+        }
+        if(newRole==='owner') list.ownerEmail=lower;
+        else if(oldRole==='owner' && newRole!=='owner' && list.ownerEmail===lower) list.ownerEmail=null;
+        if(!list.emails.includes(lower)) list.emails.push(lower);
+        list.updatedAt=Date.now();
+        setFallbackAdminList(list);
+    }
+}
+
 async function ensureDocs(){
     if(!firebaseInitialized) return;
     try{
@@ -376,10 +551,14 @@ async function ensureDocs(){
             console.log('[DevDNA v1.0] Default chat channels seeded');
         }
         await ensureOwnerExists();
+        await ensureAdminListExists();
     }catch(e){ console.warn('[DevDNA v1.0] ensureDocs failed',e); }
 }
 if(firebaseInitialized) ensureDocs();
-else ensureOwnerExists(); // FIX 1 & 2: Ensure owner exists even in mock mode so Admins tab and chat members not empty
+else{
+    ensureOwnerExists();
+    ensureAdminListExists();
+} // FIX 1 & 2: Ensure owner exists even in mock mode
 
 // LEADERBOARD (anonymous)
 export async function incrementArchetype(key){
@@ -543,13 +722,15 @@ export async function createAdmin({gmail, displayName, password, role, permissio
     const id=sanitizeGmail(gmail);
     const existing=await getAdminByGmail(gmail);
     if(existing) throw new Error('Admin with this Gmail already exists');
-    // PART 2: Hash password on creation if plaintext
     let pwdToStore = password;
     if(pwdToStore && !isPasswordHashed(pwdToStore)){
         try{ pwdToStore = await sha256Hash(pwdToStore); console.log('[DevDNA v1.0] 🔒 Password hashed on creation for', gmail); }catch(e){ console.warn('[DevDNA v1.0] Password hashing failed on creation', e); }
     }
     const data={gmail:gmail.toLowerCase(), displayName, password:pwdToStore, role:role||'admin', permissions:role==='owner'||role==='administrator'?{...DEFAULT_PERMISSIONS}:(permissions||{...DEFAULT_PERMISSIONS}), avatar:avatar||"", createdAt:Date.now(), addedBy:addedBy||"unknown", displayAsOwner:displayAsOwner||false};
     if(firebaseInitialized){ await setDoc(doc(db,'admins',id), data); }else{ const admins=getFallbackAdmins(); admins.push(data); setFallbackAdmins(admins); }
+    // Maintain admin_list for new rules (spec: call rebuildAdminList)
+    try{ await updateAdminListOnCreate(gmail, role||'admin'); }catch{}
+    try{ await rebuildAdminList(); }catch(e){ console.warn('[DevDNA v1.0] rebuildAdminList after create failed', e); }
     return data;
 }
 export async function updateAdmin(gmail, updates){
@@ -558,12 +739,20 @@ export async function updateAdmin(gmail, updates){
     const ownerIdToCheck = effectiveOwner ? sanitizeGmail(effectiveOwner) : sanitizeGmail(OWNER_CONFIG.gmail);
     const isOwnerTarget = sanitizeGmail(gmail)===ownerIdToCheck || (effectiveOwner && gmail.toLowerCase()===effectiveOwner);
     if(isOwnerTarget){ if(updates.role && updates.role!=='owner') throw new Error('OWNER cannot be demoted — EVER'); }
-    // PART 2: Hash new passwords if plaintext
     if(updates.password && !isPasswordHashed(updates.password)){
         try{ updates.password = await sha256Hash(updates.password); console.log('[DevDNA v1.0] 🔒 Password hashed on update for', gmail); }catch(e){ console.warn('[DevDNA v1.0] Password hashing failed on update', e); }
     }
+    let oldRole=null;
+    try{
+        const existing=await getAdminByGmail(gmail);
+        if(existing) oldRole=existing.role;
+    }catch{}
     if(firebaseInitialized){ const ref=doc(db,'admins',id); await updateDoc(ref,{...updates, updatedAt:Date.now()}); }
     else{ const admins=getFallbackAdmins(); const idx=admins.findIndex(a=>sanitizeGmail(a.gmail)===id); if(idx>=0){ admins[idx]={...admins[idx],...updates}; setFallbackAdmins(admins); } }
+    if(updates.role && oldRole && updates.role!==oldRole){
+        try{ await updateAdminListOnRoleChange(gmail, oldRole, updates.role); }catch{}
+        try{ await rebuildAdminList(); }catch(e){ console.warn('[DevDNA v1.0] rebuildAdminList after role change failed', e); }
+    }
 }
 export async function deleteAdmin(gmail){
     const id=sanitizeGmail(gmail);
@@ -572,6 +761,8 @@ export async function deleteAdmin(gmail){
     if(sanitizeGmail(gmail)===ownerIdToCheck || (effectiveOwner && gmail.toLowerCase()===effectiveOwner)) throw new Error('OWNER cannot be removed — EVER');
     if(firebaseInitialized){ await deleteDoc(doc(db,'admins',id)); }
     else{ const admins=getFallbackAdmins().filter(a=>sanitizeGmail(a.gmail)!==id); setFallbackAdmins(admins); }
+    try{ await updateAdminListOnDelete(gmail); }catch{}
+    try{ await rebuildAdminList(); }catch(e){ console.warn('[DevDNA v1.0] rebuildAdminList after delete failed', e); }
 }
 export function getDefaultPermissions(){ return {...DEFAULT_PERMISSIONS}; }
 export function getPermissionDefs(){ return [...PERMISSION_DEFS]; }
