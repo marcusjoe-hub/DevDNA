@@ -280,7 +280,7 @@ async function ensureOwnerExists(){
     }catch(e){}
 
     if(ownerSetupComplete){
-        console.log('[DevDNA v1.0] Owner setup complete');
+        console.log('[DevDNA v1.0] Owner setup complete - skipping auto-seed from OWNER_CONFIG, owner is', effectiveOwnerGmail||'in Firestore');
         // Still ensure at least one owner exists in Firestore, but don't create placeholder
         if(firebaseInitialized && effectiveOwnerGmail){
             try{
@@ -514,6 +514,10 @@ async function updateAdminListOnRoleChange(gmail, oldRole, newRole){
     }
 }
 
+function safeString(val, fallback='Unknown'){
+    return (val && typeof val === 'string') ? val : fallback;
+}
+
 async function ensureDocs(){
     if(!firebaseInitialized) return;
     try{
@@ -522,7 +526,6 @@ async function ensureDocs(){
         if(!lbSnap.exists()) await setDoc(lbRef,{...defaultCounts, total:0, updatedAt:Date.now()});
         else {
             const data=lbSnap.data();
-            // Add missing 5 archetypes if old doc has only 5
             const missing={};
             ['security','cloud','game','mobile','data'].forEach(k=>{ if(data[k]===undefined) missing[k]=0; });
             if(Object.keys(missing).length>0) await updateDoc(lbRef, missing);
@@ -541,7 +544,6 @@ async function ensureDocs(){
             if(d.announcement===undefined) updates.announcement=defaultSettings.announcement;
             if(Object.keys(updates).length>0) await updateDoc(settingsRef, {...updates, updatedAt:Date.now()});
         }
-        // Seed default chat channels if empty
         const chatCol=collection(db,'chat_channels');
         const chatSnaps=await getDocs(chatCol);
         if(chatSnaps.empty){
@@ -552,7 +554,13 @@ async function ensureDocs(){
         }
         await ensureOwnerExists();
         await ensureAdminListExists();
-    }catch(e){ console.warn('[DevDNA v1.0] ensureDocs failed',e); }
+    }catch(err){
+        if(err.code==='permission-denied'){
+            console.log('[DevDNA v1.0] ensureDocs skipped (auth required for some collections)');
+            return;
+        }
+        console.warn('[DevDNA v1.0] ensureDocs partial fail:', err.code||err.message);
+    }
 }
 if(firebaseInitialized) ensureDocs();
 else{
