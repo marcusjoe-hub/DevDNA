@@ -115,7 +115,6 @@ const DOM = {
     profile: document.getElementById('profile-section'),
     leaderboardPage: document.getElementById('leaderboard-page-section'),
     ownerSetup: document.getElementById('owner-setup-section'),
-    securityAudit: document.getElementById('security-audit-section'),
     notfoundHash: document.getElementById('notfound-hash'),
     notfoundReturn: document.getElementById('notfound-return'),
     startBtn: document.getElementById('start-btn'),
@@ -269,20 +268,91 @@ function initParticles(){
     window.addEventListener('resize',()=>{resize();create();});
     document.addEventListener('visibilitychange',()=>{ if(document.hidden) cancelAnimationFrame(raf); else draw(); });
 }
-function initCustomCursor(){
-    const isTouch=('ontouchstart' in window)||navigator.maxTouchPoints>0||window.matchMedia('(pointer: coarse)').matches;
-    if(isTouch) return;
-    const cursor=DOM.customCursor; if(!cursor) return;
-    const dot=cursor.querySelector('.cursor-dot'); const ring=cursor.querySelector('.cursor-ring');
-    let mouseX=0,mouseY=0,ringX=0,ringY=0;
-    document.body.classList.add('custom-cursor-active'); cursor.classList.add('active');
-    window.addEventListener('mousemove',(e)=>{ mouseX=e.clientX; mouseY=e.clientY; dot.style.left=`${mouseX}px`; dot.style.top=`${mouseY}px`; }, {passive:true});
-    function animateRing(){ ringX+=(mouseX-ringX)*0.18; ringY+=(mouseY-ringY)*0.18; ring.style.left=`${ringX}px`; ring.style.top=`${ringY}px`; requestAnimationFrame(animateRing); } animateRing();
-    document.addEventListener('mouseover',(e)=>{ if(e.target.closest('button, .option-card, a, .chip, .sidebar-tab')) ring.classList.add('hover'); });
-    document.addEventListener('mouseout',(e)=>{ if(e.target.closest('button, .option-card, a, .chip, .sidebar-tab')) ring.classList.remove('hover'); });
-    let lastTrail=0;
-    window.addEventListener('mousemove',(e)=>{ const now=Date.now(); if(now-lastTrail<80) return; lastTrail=now; const trail=document.createElement('div'); trail.className='cursor-trail'; trail.style.left=e.clientX+'px'; trail.style.top=e.clientY+'px'; document.body.appendChild(trail); trail.animate([{transform:'translate(-50%,-50%) scale(1)',opacity:0.6},{transform:'translate(-50%,-50%) scale(0)',opacity:0}],{duration:400,easing:'ease-out'}).onfinish=()=>trail.remove(); }, {passive:true});
+function isCustomCursorSupported(){
+    if(typeof window==='undefined') return false;
+    if(window.matchMedia('(pointer: coarse)').matches) return false;
+    if(('ontouchstart' in window) || navigator.maxTouchPoints>0) return false;
+    // Check if cursor DOM element can actually be positioned
+    try{
+        const test=document.createElement('div');
+        test.style.cssText='position:fixed;top:-100px;left:-100px;width:1px;height:1px;pointer-events:none;';
+        document.body.appendChild(test);
+        const rect=test.getBoundingClientRect();
+        const canRender=rect && typeof rect.top==='number';
+        document.body.removeChild(test);
+        return canRender;
+    }catch(err){
+        return false;
+    }
 }
+
+function initCustomCursor(){
+    // FIX 1: Universal compatibility with fallback
+    if(!isCustomCursorSupported()){
+        console.log('[DevDNA v1.0] Custom cursor unsupported — using system cursor');
+        document.documentElement.classList.add('use-system-cursor');
+        document.documentElement.classList.remove('use-custom-cursor');
+        return;
+    }
+    const cursor=DOM.customCursor; 
+    if(!cursor){
+        console.warn('[DevDNA v1.0] Custom cursor element missing — fallback to system');
+        document.documentElement.classList.add('use-system-cursor');
+        return;
+    }
+    try{
+        document.documentElement.classList.add('use-custom-cursor');
+        document.documentElement.classList.remove('use-system-cursor');
+        const dot=cursor.querySelector('.cursor-dot'); 
+        const ring=cursor.querySelector('.cursor-ring');
+        let mouseX=0,mouseY=0,ringX=0,ringY=0;
+        cursor.classList.add('active');
+        window.addEventListener('mousemove',(e)=>{ mouseX=e.clientX; mouseY=e.clientY; if(dot){ dot.style.left=`${mouseX}px`; dot.style.top=`${mouseY}px`; } }, {passive:true});
+        function animateRing(){ 
+            ringX+=(mouseX-ringX)*0.18; ringY+=(mouseY-ringY)*0.18; 
+            if(ring){ ring.style.left=`${ringX}px`; ring.style.top=`${ringY}px`; }
+            requestAnimationFrame(animateRing); 
+        } 
+        animateRing();
+        document.addEventListener('mouseover',(e)=>{ if(e.target.closest('button, .option-card, a, .chip, .sidebar-tab')) ring?.classList.add('hover'); });
+        document.addEventListener('mouseout',(e)=>{ if(e.target.closest('button, .option-card, a, .chip, .sidebar-tab')) ring?.classList.remove('hover'); });
+        let lastTrail=0;
+        window.addEventListener('mousemove',(e)=>{
+            const now=Date.now(); 
+            if(now-lastTrail<80) return; 
+            lastTrail=now; 
+            const trail=document.createElement('div'); 
+            trail.className='cursor-trail'; 
+            trail.style.left=e.clientX+'px'; 
+            trail.style.top=e.clientY+'px'; 
+            document.body.appendChild(trail); 
+            const anim=trail.animate([{transform:'translate(-50%,-50%) scale(1)',opacity:0.6},{transform:'translate(-50%,-50%) scale(0)',opacity:0}],{duration:400,easing:'ease-out'});
+            anim.onfinish=()=>trail.remove(); 
+        }, {passive:true});
+        console.log('[DevDNA v1.0] Custom cursor initialized ✔');
+    }catch(err){
+        console.warn('[DevDNA v1.0] Custom cursor init failed — fallback to system', err);
+        document.documentElement.classList.remove('use-custom-cursor');
+        document.documentElement.classList.add('use-system-cursor');
+    }
+}
+
+// Runtime error handler — if custom cursor throws → fallback
+window.addEventListener('error', (e)=>{
+    if(e.filename && (e.filename.includes('cursor') || (e.message && e.message.toLowerCase().includes('cursor')))){
+        console.warn('[DevDNA v1.0] Cursor error — falling back to system cursor', e.message);
+        document.documentElement.classList.remove('use-custom-cursor');
+        document.documentElement.classList.add('use-system-cursor');
+    }
+});
+window.addEventListener('unhandledrejection', (e)=>{
+    if(e.reason && e.reason.message && e.reason.message.toLowerCase().includes('cursor')){
+        console.warn('[DevDNA v1.0] Cursor promise error — fallback to system', e.reason.message);
+        document.documentElement.classList.remove('use-custom-cursor');
+        document.documentElement.classList.add('use-system-cursor');
+    }
+});
+
 
 // BOOT SCREEN v1.0 — 3x faster (1.6s), text speed same, progress 3x faster, instant at 100%
 const BOOT_LINES=['> Initializing DevDNA...','> Loading neural weights...','> Connecting to archetype database...','> System ready.'];
@@ -766,12 +836,12 @@ async function handleShare(){
 function showToast(){ DOM.toast.classList.remove('hidden'); DOM.toast.classList.add('show'); setTimeout(()=>{ DOM.toast.classList.remove('show'); DOM.toast.classList.add('hidden'); },2500); if(navigator.vibrate) navigator.vibrate(20); }
 
 // Routing + banner visibility + theme
-function hideAllSections(){ [DOM.landing,DOM.quiz,DOM.result,DOM.locked,DOM.admin,DOM.uptime,DOM.notfound,DOM.profile,DOM.leaderboardPage,DOM.ownerSetup,DOM.securityAudit].forEach(s=>{ if(s){ s.style.display='none'; s.classList.remove('active'); } }); }
+function hideAllSections(){ [DOM.landing,DOM.quiz,DOM.result,DOM.locked,DOM.admin,DOM.uptime,DOM.notfound,DOM.profile,DOM.leaderboardPage,DOM.ownerSetup].forEach(s=>{ if(s){ s.style.display='none'; s.classList.remove('active'); } }); }
 
 function shouldShowBanner(){
     const hash=location.hash;
     // Hidden on utility pages
-    const hiddenHashes=['#secret-admin-only','#uptime-ping','#404','#owner-setup','#security-audit'];
+    const hiddenHashes=['#secret-admin-only','#uptime-ping','#404','#owner-setup'];
     if(hiddenHashes.includes(hash)) return false;
     // Hidden on any invalid hash that leads to 404
     const validHashes=['',' #',' #landing','#quiz','#result','#profile','#leaderboard',' #leaderboard'.trim()];
@@ -780,7 +850,7 @@ function shouldShowBanner(){
     if(DOM.uptime && DOM.uptime.classList.contains('active')) return false;
     if(DOM.notfound && DOM.notfound.classList.contains('active')) return false;
     if(DOM.ownerSetup && DOM.ownerSetup.classList.contains('active')) return false;
-    if(DOM.securityAudit && DOM.securityAudit.classList.contains('active')) return false;
+    if(/* securityAudit removed */ && /* securityAudit removed */.classList.contains('active')) return false;
     // Only show on main pages
     return true;
 }
@@ -841,45 +911,6 @@ function showOwnerSetupPage(){
     updateBannerVisibility();
 }
 
-function showSecurityAuditPage(){
-    // Only OWNER can access - check via admin session or Firebase
-    hideAllSections();
-    if(DOM.securityAudit){
-        DOM.securityAudit.style.display='block';
-        void DOM.securityAudit.offsetWidth;
-        DOM.securityAudit.classList.add('active');
-    }
-    updateBannerVisibility();
-    // Try to run audit via admin module if available
-    import('./admin.js').then(mod=>{
-        // admin.js will handle its own audit button, but we also try to run security audit from here
-        if(window.__DevDNA_Admin && window.__DevDNA_Admin.runSecurityAudit){
-            window.__DevDNA_Admin.runSecurityAudit();
-        }
-    }).catch(()=>{});
-    // Also try to run audit via firebase helpers
-    import('./firebase.js').then(async fb=>{
-        const resultsEl=document.getElementById('security-audit-results');
-        if(!resultsEl) return;
-        resultsEl.innerHTML='<div class="mono" style="font-size:11px;">Running audit via main page...</div>';
-        try{
-            const allAdmins = await fb.getAllAdmins();
-            const isHashed = (pwd)=>/^[a-f0-9]{64}$/i.test(pwd);
-            const hashedCount = allAdmins.filter(a=>isHashed(a.password)).length;
-            resultsEl.innerHTML=`
-                <div class="admin-card glass-panel" style="padding:12px; border:1px solid ${hashedCount===allAdmins.length?'rgba(0,255,153,0.35)':'rgba(255,77,77,0.35)'};">
-                    <div style="display:flex; justify-content:space-between;"><span>🔒 Passwords hashed</span><span style="color:${hashedCount===allAdmins.length?'#00ff99':'#ff4d4d'};">${hashedCount}/${allAdmins.length} ${hashedCount===allAdmins.length?'✅':'❌'}</span></div>
-                </div>
-                <div class="admin-card glass-panel" style="padding:12px;"><div>🔒 Firestore rules: MANUAL CHECK required (open console and try unauthenticated write)</div><div class="mono" style="font-size:10px; color:var(--text-muted); margin-top:4px;">Try: import('./firebase.js').then(m=>m.getAllAdmins()) without auth → should FAIL with permission-denied</div></div>
-                <div class="admin-card glass-panel" style="padding:12px;"><div>🔒 OWNER_CONFIG migrated: ${fb.OWNER_CONFIG?.gmail==='MIGRATED_TO_FIRESTORE'?'✅ YES':'❌ NO (still in code)'}</div></div>
-            `;
-        }catch(e){
-            resultsEl.innerHTML=`<div class="admin-card glass-panel" style="padding:12px; color:#ff4d4d;">Audit failed: ${e.message}</div>`;
-        }
-    });
-}
-
-
 function handleRouter(){
     const hash=location.hash;
     DOM.revealSeq.classList.remove('active');
@@ -888,7 +919,6 @@ function handleRouter(){
     if(hash==='#profile'){ showProfilePage(); return; }
     if(hash==='#leaderboard'){ showLeaderboardPage(); return; }
     if(hash==='#owner-setup'){ showOwnerSetupPage(); return; }
-    if(hash==='#security-audit'){ showSecurityAuditPage(); return; }
     if(hash===''||hash==='#'||hash==='#landing'){ showLanding(); return; }
     if(['#quiz','#result'].includes(hash)){ if(DOM.result.classList.contains('active')||DOM.quiz.classList.contains('active')) return; showLanding(); return; }
     if(hash.startsWith('#')){ show404(); } else { showLanding(); }
