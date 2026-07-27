@@ -246,16 +246,6 @@
                 </aside>
                 <main class="admin-content">
                     <div id="tab-dashboard" class="admin-tab-content active"><div class="tab-header"><h2>📊 Dashboard Overview</h2><p class="mono">Real-time system status • DevDNA v1.0 Core • 🔒 Security Overhaul Active</p></div><div class="overview-grid"><div class="overview-card glass-panel"><div class="overview-label">Total Submissions</div><div id="overview-total" class="overview-num" style="color:var(--neon-green)">0</div></div><div class="overview-card glass-panel"><div class="overview-label">Most Popular</div><div id="overview-popular" class="overview-num" style="color:var(--neon-purple)">—</div></div><div class="overview-card glass-panel"><div class="overview-label">Event Status</div><div id="overview-event" class="overview-num">LIVE</div></div><div class="overview-card glass-panel"><div class="overview-label">Active Admins</div><div id="overview-admins" class="overview-num">0</div></div></div>
-                        <div class="admin-card glass-panel" style="margin-top:16px; border:1px solid rgba(0,255,153,0.25); background:linear-gradient(135deg, rgba(0,255,153,0.08), rgba(0,0,0,0.2));">
-                            <div class="admin-card-header"><div class="admin-card-title">🔒 Security Status</div><div class="mono" style="font-size:10px; color:var(--neon-green);">LEVEL 2 STRICT</div></div>
-                            <div id="security-status-grid" style="display:grid; gap:10px; margin-top:12px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid var(--border-glass);"><span class="mono" style="font-size:11px;">🔒 Passwords hashed</span><span id="sec-passwords" class="mono" style="font-size:11px; color:var(--text-muted);">Checking...</span></div>
-                                <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid var(--border-glass);"><span class="mono" style="font-size:11px;">🔒 Firestore rules</span><span id="sec-firestore" class="mono" style="font-size:11px; color:var(--text-muted);">MANUAL CHECK</span></div>
-                                <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid var(--border-glass);"><span class="mono" style="font-size:11px;">🔒 API key restriction</span><span id="sec-apikey" class="mono" style="font-size:11px;"><a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:var(--neon-blue); text-decoration:underline;">MANUAL CHECK →</a></span></div>
-                                <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid var(--border-glass);"><span class="mono" style="font-size:11px;">🔒 OWNER_CONFIG migrated</span><span id="sec-owner-config" class="mono" style="font-size:11px; color:var(--text-muted);">Checking...</span></div>
-                            </div>
-                            <div style="margin-top:12px; display:flex; gap:8px;"><button id="sec-audit-btn" class="btn-admin-blue" style="font-size:11px;">🔍 Run Security Audit</button><button id="sec-rules-btn" class="btn-admin-blue" style="font-size:11px;">📋 View Rules</button></div>
-                        </div>
                         <div class="admin-grid" style="margin-top:16px;"><div class="admin-card glass-panel"><div class="admin-card-header"><div class="admin-card-title">Recent Activity (Last 5)</div></div><div id="dashboard-recent-activity" class="activity-list-compact"></div></div><div class="admin-card glass-panel"><div class="admin-card-header"><div class="admin-card-title">Stats Per Archetype (10)</div></div><div id="dashboard-stats-grid" class="admin-stats-grid"></div></div></div></div>
 
                     <div id="tab-event" class="admin-tab-content"><div class="tab-header"><h2>⚙️ Event Control</h2></div><div class="admin-card glass-panel"><div class="admin-card-header"><div class="admin-card-title">EVENT STATUS</div><div id="event-badge" class="admin-status-badge badge-live">🟢 LIVE</div></div><div class="admin-actions"><button id="admin-start-event" class="btn-admin-green">START EVENT</button><button id="admin-close-event" class="btn-admin-red">CLOSE EVENT</button></div></div></div>
@@ -355,26 +345,6 @@
 
         <section id="uptime-section" class="section uptime-section"><div class="glass-panel" style="padding:28px; border-radius:20px;"><div class="uptime-badge"><span class="pulse-dot"></span> SYSTEM OPERATIONAL</div><h2 class="uptime-title">DevDNA STATUS: 🟢 ONLINE</h2><div class="uptime-grid"><div class="uptime-item"><span>Uptime:</span><strong id="uptime-duration">00:00:00</strong></div><div class="uptime-item"><span>Last checked:</span><strong id="uptime-lastchecked">—</strong></div><div class="uptime-item"><span>Server:</span><strong>Render • devdna-2trh.onrender.com</strong></div><div class="uptime-item"><span>Firestore:</span><strong id="uptime-firestore">Checking...</strong></div></div></div></section>
 
-        <!-- Security Audit - Hidden diagnostic panel #security-audit (OWNER only) -->
-        <section id="security-audit-section" class="section" style="display:none;">
-            <div class="glass-panel" style="padding:28px; border-radius:20px; max-width:780px; margin:0 auto;">
-                <div style="text-align:center; margin-bottom:20px;">
-                    <div style="font-size:32px;">🔒</div>
-                    <h2 style="font-family:var(--font-display); font-weight:900; margin-top:8px;">SECURITY AUDIT — OWNER ONLY</h2>
-                    <p class="mono" style="font-size:11px; color:var(--text-muted);">Hidden diagnostic • Auto-runs tests • #security-audit</p>
-                </div>
-                <div id="security-audit-results" style="display:grid; gap:12px;">
-                    <div class="admin-card glass-panel" style="padding:16px;"><div class="mono" style="font-size:11px;">Running audit...</div></div>
-                </div>
-                <div style="margin-top:20px; text-align:center;">
-                    <button id="security-audit-rerun" class="btn-admin-blue">🔄 Rerun Audit</button>
-                    <button id="security-audit-back" class="btn-admin-blue">← Back to Dashboard</button>
-                </div>
-                <div class="mono" style="font-size:10px; color:var(--text-muted); margin-top:16px; line-height:1.6;">
-                    Tests: 1) All admin passwords hashed (SHA-256 64 hex) 2) Firestore rules block unauth writes (manual check via console) 3) DevTools bypass attempt (import getAllAdmins without auth should FAIL) 4) OWNER_CONFIG migrated • See console for detailed logs.
-                </div>
-            </div>
-        </section>
         <section id="notfound-section" class="section notfound-section"><div class="glass-panel" style="padding:36px 26px; border-radius:20px;"><div class="error-code glitch">ERROR 404</div><div class="error-sub">ACCESS DENIED — RETURN TO BASE</div><div class="error-lines">> Signal lost.<br>> Coordinates: NULL<br>> Tracing route...<br>> Hash not recognized: <span id="notfound-hash" style="color:var(--neon-orange)">#unknown</span><br>> Reconnecting...</div><button id="notfound-return" class="btn btn-primary btn-glow"><span class="btn-inner">RETURN TO DEVDNA</span></button></div></section>
     </main>
 
