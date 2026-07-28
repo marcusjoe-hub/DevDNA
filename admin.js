@@ -1626,3 +1626,431 @@ export function closeAdminPanel(){
 }
 
 if(typeof window!=='undefined'){ window.__DevDNA_Admin={openAdminPanel, closeAdminPanel}; }
+function renderAdmins(overrideAdmins=null){
+    const renderStart=Date.now();
+    console.log('[DevDNA v1.0] renderAdmins called at', new Date().toISOString());
+    const adminsToRender = overrideAdmins || allAdmins;
+    if(!DOM.adminsList) return;
+    console.log('[DevDNA v1.0] Rendering admins:', adminsToRender.length);
+    if(adminsToRender.length===0){
+        DOM.adminsList.innerHTML = '<div class="mono" style="padding:20px; text-align:center; color:#ff4d4d;">⚠️ No admins found</div>';
+        return;
+    }
+    const search=(DOM.adminSearch?.value||'').toLowerCase();
+    let filtered=[...adminsToRender];
+    if(search){ filtered=filtered.filter(a=>a && a.gmail && (a.gmail.toLowerCase().includes(search)|| (a.displayName||'').toLowerCase().includes(search))); }
+    filtered.sort((a,b)=>{
+        if(!a||!a.gmail) return 1;
+        if(!b||!b.gmail) return -1;
+        if(a.role==='owner' && !a.displayAsOwner) return -1;
+        if(b.role==='owner' && !b.displayAsOwner) return 1;
+        const aFake = a.displayAsOwner && a.role!=='owner';
+        const bFake = b.displayAsOwner && b.role!=='owner';
+        if(aFake && !bFake) return -1;
+        if(!aFake && bFake) return 1;
+        if(aFake && bFake) return (a.createdAt||0)-(b.createdAt||0);
+        const order={owner:0, administrator:1, admin:2};
+        if(order[a.role]!==order[b.role]) return order[a.role]-order[b.role];
+        return (a.displayName||'').localeCompare(b.displayName||'');
+    });
+    DOM.adminsList.innerHTML='';
+    filtered.forEach(admin=>{
+        if(!admin || !admin.gmail) return;
+        const displayName = admin.displayName || admin.gmail.split('@')[0] || 'Unknown';
+        const role = admin.role || 'admin';
+        const gmail = admin.gmail.toLowerCase();
+        const isRealOwner = role==='owner' && !admin.displayAsOwner;
+        const isFakeOwner = !!admin.displayAsOwner;
+        const roleEmoji = isFakeOwner ? '👑' : (role==='owner'?'👑':role==='administrator'?'⚡':'🛡️');
+        const badgeClass = isFakeOwner ? 'owner' : (role==='owner'?'owner':role==='administrator'?'administrator':'admin');
+        const permsCount = Object.values(admin.permissions||{}).filter(Boolean).length;
+        const totalPerms = 20;
+        const permDisplay = (role==='owner' || isFakeOwner) ? '<span style="color:#ffd700;">🌟 FULL ACCESS</span>' : (role==='administrator' ? '<span style="color:var(--neon-purple);">⚡ FULL ACCESS</span>' : `${permsCount}/${totalPerms} permissions`);
+        const div=document.createElement('div');
+        div.className=`admin-row ${badgeClass}`;
+        div.innerHTML=`<img class="admin-avatar" src="${admin.avatar||''}" alt=""><div class="admin-row-info"><div class="admin-row-name">${displayName} <span class="role-badge ${badgeClass}">${roleEmoji} ${role.toUpperCase()}</span></div><div class="admin-row-gmail">${gmail} • ${permDisplay}</div></div>`;
+        div.addEventListener('click',()=>{ openEditAdminModal(admin.gmail); });
+        DOM.adminsList.appendChild(div);
+    });
+    console.log('[DevDNA v1.0] renderAdmins completed in', (Date.now()-renderStart)+'ms');
+}
+function renderDashboardStats(counts){
+    const renderStart=Date.now();
+    console.log('[DevDNA v1.0] renderDashboardStats called at', new Date().toISOString());
+    if(DOM.overviewTotal) DOM.overviewTotal.textContent = counts ? (counts.total||0).toLocaleString() : '0';
+    if(DOM.overviewAdmins){
+        const now=Date.now();
+        const fiveMin=5*60*1000;
+        let activeCount=0;
+        allAdmins.forEach(admin=>{
+            if(!admin || !admin.gmail) return;
+            try{
+                const adminGmail = (admin.gmail||'').toLowerCase();
+                const currentGmail = currentAdmin ? (currentAdmin.gmail||'').toLowerCase() : '';
+                if(currentGmail && adminGmail===currentGmail) activeCount++;
+                else if(admin.lastSeen && (now - admin.lastSeen) < fiveMin) activeCount++;
+            }catch(e){}
+        });
+        if(activeCount===0 && currentAdmin) activeCount=1;
+        DOM.overviewAdmins.textContent = activeCount.toString();
+    }
+    if(counts && DOM.overviewPopular){
+        const entries=Object.entries(counts).filter(([k])=>k!=='total').sort((a,b)=>b[1]-a[1]);
+        if(entries.length>0){ const topKey=entries[0][0]; const arch=ARCHETYPES[topKey]; DOM.overviewPopular.textContent=arch?arch.name:topKey; }
+    }
+    if(DOM.dashboardStats){
+        DOM.dashboardStats.innerHTML='';
+        const source=counts||{frontend:0,backend:0,fullstack:0,debugging:0,ai:0,security:0,cloud:0,game:0,mobile:0,data:0};
+        Object.keys(ARCHETYPES).forEach(key=>{
+            const arch=ARCHETYPES[key]; const count=source[key]||0;
+            const card=document.createElement('div'); card.className='stat-card';
+            card.innerHTML=`<span class="stat-emoji">${arch.emoji}</span><div class="stat-name">${arch.name}</div><div class="stat-label">DEVELOPERS</div><span class="stat-count" style="color:${arch.color};">${count}</span>`;
+            DOM.dashboardStats.appendChild(card);
+        });
+    }
+    console.log('[DevDNA v1.0] renderDashboardStats completed in', (Date.now()-renderStart)+'ms');
+}
+function renderDashboardRecent(){
+    if(!DOM.dashboardRecent) return;
+    DOM.dashboardRecent.innerHTML='';
+    const recent=activityLogs.slice(0,5);
+    if(recent.length===0){ DOM.dashboardRecent.innerHTML='<div class="mono" style="font-size:11px; color:var(--text-muted);">No activity yet</div>'; return; }
+    recent.forEach(log=>{
+        if(!log) return;
+        const div=document.createElement('div'); div.className='activity-item';
+        div.innerHTML=`<div><span>${getRoleEmoji(log.role)}</span><strong>${log.displayName||'Unknown'}</strong> <span class="activity-time">${log.timestamp?new Date(log.timestamp).toLocaleString():''}</span></div><div>${log.action||''}${log.details?` — ${log.details}`:''}</div>`;
+        DOM.dashboardRecent.appendChild(div);
+    });
+}
+function renderLeaderboardStats(counts){
+    const total=counts.total||Object.keys(counts).filter(k=>k!=='total').reduce((s,k)=>s+(counts[k]||0),0);
+    if(DOM.totalSubs) DOM.totalSubs.textContent=total.toLocaleString();
+    if(DOM.statsGrid){
+        DOM.statsGrid.innerHTML='';
+        Object.keys(ARCHETYPES).forEach(key=>{
+            const arch=ARCHETYPES[key]; const count=counts[key]||0;
+            const card=document.createElement('div'); card.className='stat-card';
+            card.innerHTML=`<span class="stat-emoji">${arch.emoji}</span><div class="stat-name">${arch.name}</div><div class="stat-label">DEVELOPERS</div><span class="stat-count" style="color:${arch.color};">${count}</span>`;
+            DOM.statsGrid.appendChild(card);
+        });
+    }
+}
+function renderQuestions(){
+    if(!DOM.questionsList) return;
+    DOM.questionsList.innerHTML='';
+    const filtered=[...allQuestions].sort((a,b)=>(a.order||0)-(b.order||0));
+    filtered.forEach((q,idx)=>{
+        if(!q || !q.text) return;
+        const div=document.createElement('div'); div.className='question-item';
+        const canEdit=userCan('edit_questions'); const canDelete=userCan('delete_questions');
+        div.innerHTML=`<div class="question-item-header"><div style="display:flex; gap:10px; align-items:center;"><span class="question-item-order">#${q.order||idx+1}</span><span class="question-item-title">${q.text}</span></div><span>▼</span></div><div class="question-item-body"><div style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px;">${(q.options||[]).map(opt=>{ const arch=ARCHETYPES[opt.archetype]||{emoji:'❓',name:opt.archetype}; return `<div class="q-option"><span class="q-option-emoji">${arch.emoji}</span><span class="q-option-text">${opt.text}</span><span class="q-option-arch" style="border-color:${arch.color}44; color:${arch.color};">${arch.name}</span></div>`; }).join('')}</div><div style="display:flex; gap:8px;">${canEdit?`<button class="btn-admin-blue q-edit-btn" data-id="${q.id}">✏️ Edit</button>`:''}${canDelete?`<button class="btn-admin-red q-delete-btn" data-id="${q.id}">❌ Delete</button>`:''}</div></div>`;
+        const header=div.querySelector('.question-item-header');
+        header.addEventListener('click',()=>{ playClick(); div.classList.toggle('expanded'); });
+        div.querySelector('.q-edit-btn')?.addEventListener('click',(e)=>{ e.stopPropagation(); playClick(); openQuestionEditor(q.id); });
+        div.querySelector('.q-delete-btn')?.addEventListener('click',(e)=>{ e.stopPropagation(); playClick(); deletingQuestionId=q.id; DOM.deleteQuestionModal?.classList.remove('hidden'); });
+        DOM.questionsList.appendChild(div);
+    });
+    if(DOM.addQuestionBtn){ DOM.addQuestionBtn.style.display=userCan('add_questions')?'inline-flex':'none'; }
+}
+function openQuestionEditor(id){
+    editingQuestionId=id;
+    const q=allQuestions.find(x=>x.id===id);
+    if(DOM.qeTitle) DOM.qeTitle.textContent=id?'Edit Question':'Add New Question';
+    if(DOM.qeText) DOM.qeText.value=q?q.text:'';
+    if(DOM.qeOptions){
+        DOM.qeOptions.innerHTML='';
+        for(let i=0;i<4;i++){
+            const opt=q?.options?.[i]||{text:'',archetype:'frontend'};
+            const row=document.createElement('div');
+            row.style.cssText='display:flex; gap:8px; margin-bottom:8px; align-items:center;';
+            row.innerHTML=`<span style="font-family:var(--font-mono); font-size:11px; width:20px;">${String.fromCharCode(65+i)}</span><input type="text" class="admin-input-sm qe-opt-text" placeholder="Answer text..." value="${(opt.text||'').replace(/"/g,'&quot;')}" style="flex:1; margin-bottom:0;"><select class="admin-input-sm qe-opt-arch" style="max-width:140px; margin-bottom:0;"><option value="frontend" ${opt.archetype==='frontend'?'selected':''}>🎨 Frontend</option><option value="backend" ${opt.archetype==='backend'?'selected':''}>🛠 Backend</option><option value="fullstack" ${opt.archetype==='fullstack'?'selected':''}>⚡ Fullstack</option><option value="debugging" ${opt.archetype==='debugging'?'selected':''}>🐞 Debug</option><option value="ai" ${opt.archetype==='ai'?'selected':''}>🤖 AI</option><option value="security" ${opt.archetype==='security'?'selected':''}>🔒 Sec</option><option value="cloud" ${opt.archetype==='cloud'?'selected':''}>☁️ Cloud</option><option value="game" ${opt.archetype==='game'?'selected':''}>🎮 Game</option><option value="mobile" ${opt.archetype==='mobile'?'selected':''}>📱 Mobile</option><option value="data" ${opt.archetype==='data'?'selected':''}>🧠 Data</option></select>`;
+            DOM.qeOptions.appendChild(row);
+        }
+    }
+    DOM.questionEditorModal?.classList.remove('hidden');
+}
+function closeQuestionEditor(){ DOM.questionEditorModal?.classList.add('hidden'); editingQuestionId=null; }
+async function saveQuestion(){
+    const text=DOM.qeText.value.trim();
+    if(!text){ alert('Question text required'); return; }
+    const optRows=DOM.qeOptions.querySelectorAll('.qe-opt-text');
+    const archRows=DOM.qeOptions.querySelectorAll('.qe-opt-arch');
+    const options=[];
+    for(let i=0;i<optRows.length;i++){
+        const t=optRows[i].value.trim();
+        const a=archRows[i].value;
+        if(!t){ alert(`Option ${String.fromCharCode(65+i)} required`); return; }
+        options.push({text:t, archetype:a});
+    }
+    const mod=await import('./firebase.js');
+    if(editingQuestionId){
+        if(!userCan('edit_questions')) return alert('No permission');
+        await mod.updateQuestion(editingQuestionId,{text, options, order:allQuestions.find(q=>q.id===editingQuestionId)?.order||Date.now()});
+        await logActivity('edited question',text.slice(0,40));
+    } else {
+        if(!userCan('add_questions')) return alert('No permission');
+        const order=allQuestions.length>0?Math.max(...allQuestions.map(q=>q.order||0))+1:1;
+        await mod.addQuestion({order,text,options});
+        await logActivity('added question',text.slice(0,40));
+    }
+    closeQuestionEditor();
+}
+function renderPermissionsCheckboxes(container, currentPerms, isAdministratorToggleOn, isOwnerViewing, targetRole){
+    const defs=getPermissionDefs();
+    if(!container) return;
+    container.innerHTML='';
+    defs.forEach(def=>{
+        const isChecked=isAdministratorToggleOn?true:(currentPerms?.[def.id]??false);
+        const isDisabled=isAdministratorToggleOn?true:false;
+        const div=document.createElement('div');
+        div.className=`permission-item ${isDisabled?'disabled':''}`;
+        div.innerHTML=`<input type="checkbox" id="perm-${def.id}" data-perm="${def.id}" ${isChecked?'checked':''} ${isDisabled?'disabled':''}><div class="permission-item-content"><div class="permission-item-name">${def.name}</div><div class="permission-item-desc">${def.desc}</div></div>`;
+        container.appendChild(div);
+    });
+}
+function openAddAdminModal(){
+    if(currentAdmin.role!=='owner' && currentAdmin.role!=='administrator'){ alert('Only OWNER and ADMINISTRATOR can create admins'); return; }
+    DOM.newGmail.value=''; DOM.newName.value=''; DOM.newPassword.value=''; DOM.newRole.value='admin'; DOM.newIsAdmin.checked=false;
+    const strengthEl=document.getElementById('pwd-strength');
+    if(strengthEl) strengthEl.textContent='';
+    if(DOM.newPassword){
+        DOM.newPassword.oninput=()=>{
+            const pwd=DOM.newPassword.value;
+            const el=document.getElementById('pwd-strength');
+            if(!el) return;
+            if(!pwd){ el.textContent=''; return; }
+            let score=0;
+            if(pwd.length>=8) score++;
+            if(pwd.length>=12) score++;
+            if(/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) score++;
+            if(/[0-9]/.test(pwd)) score++;
+            if(/[^A-Za-z0-9]/.test(pwd)) score++;
+            if(score<=2){ el.textContent='Weak 🔴'; el.style.color='#ff4d4d'; }
+            else if(score<=3){ el.textContent='Medium 🟡'; el.style.color='#ffcc00'; }
+            else { el.textContent='Strong 🟢'; el.style.color='#00ff99'; }
+        };
+    }
+    if(DOM.newDisplayAsOwner) DOM.newDisplayAsOwner.checked=false;
+    if(currentAdmin?.role!=='owner'){
+        const adminOpt=DOM.newRole.querySelector('option[value="administrator"]');
+        if(adminOpt) adminOpt.style.display='none';
+        DOM.newRole.value='admin';
+        document.getElementById('fake-owner-toggle-container')?.classList.add('hidden');
+    } else {
+        const adminOpt=DOM.newRole.querySelector('option[value="administrator"]');
+        if(adminOpt) adminOpt.style.display='';
+        document.getElementById('fake-owner-toggle-container')?.classList.remove('hidden');
+    }
+    renderPermissionsCheckboxes(DOM.permsCheckboxes, getDefaultPermissions(), false, currentAdmin?.role==='owner', 'admin');
+    DOM.addAdminModal.classList.remove('hidden');
+    DOM.newIsAdmin.onchange=()=>{
+        const isOn=DOM.newIsAdmin.checked;
+        DOM.newRole.value=isOn?'administrator':'admin';
+        renderPermissionsCheckboxes(DOM.permsCheckboxes, getDefaultPermissions(), isOn, currentAdmin?.role==='owner', DOM.newRole.value);
+    };
+    DOM.newRole.onchange=()=>{
+        const isAdminRole=DOM.newRole.value==='administrator';
+        DOM.newIsAdmin.checked=isAdminRole;
+        renderPermissionsCheckboxes(DOM.permsCheckboxes, getDefaultPermissions(), isAdminRole, currentAdmin?.role==='owner', DOM.newRole.value);
+    };
+}
+async function handleCreateAdmin(){
+    const gmail=DOM.newGmail.value.trim().toLowerCase();
+    const displayName=DOM.newName.value.trim();
+    const password=DOM.newPassword.value.trim();
+    const role=DOM.newRole.value;
+    const isAdminToggle=DOM.newIsAdmin.checked;
+    const displayAsOwner=DOM.newDisplayAsOwner?.checked||false;
+    if(!gmail||!displayName||!password){ alert('Gmail, Display Name, Password required'); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gmail)){ alert('Invalid Gmail'); return; }
+    if(role==='administrator' && currentAdmin?.role!=='owner'){ alert('Only OWNER can create ADMINISTRATOR'); return; }
+    if(displayAsOwner && currentAdmin?.role!=='owner'){ alert('Only OWNER can set DISPLAY AS OWNER'); return; }
+    let permissions={};
+    if(isAdminToggle || role==='administrator' || role==='owner' || displayAsOwner){ permissions={...getDefaultPermissions()}; }
+    else{
+        const cbs=DOM.permsCheckboxes.querySelectorAll('input[type="checkbox"]');
+        cbs.forEach(cb=>{ permissions[cb.dataset.perm]=cb.checked; });
+    }
+    try{
+        DOM.addAdminCreate.disabled=true; DOM.addAdminCreate.textContent='CREATING...';
+        await createAdmin({gmail, displayName, password, role:isAdminToggle?'administrator':role, permissions, avatar:`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=a855f7&color=fff`, addedBy:currentAdmin.gmail, displayAsOwner});
+        await logActivity('added admin',`${displayName} (${gmail}) as ${role}${displayAsOwner?' with DISPLAY AS OWNER':''}`);
+        DOM.addAdminModal.classList.add('hidden');
+    }catch(e){ alert(e.message); }
+    finally{ DOM.addAdminCreate.disabled=false; DOM.addAdminCreate.textContent='CREATE ADMIN'; }
+}
+function renderUsers(){
+    if(!DOM.usersList) return;
+    const search=(document.getElementById('users-search')?.value||'').toLowerCase();
+    const sort=document.getElementById('users-sort')?.value||'active';
+    let filtered=[...allUsers];
+    if(search){ filtered=filtered.filter(u=>u && ((u.displayName||'').toLowerCase().includes(search)|| (u.gmail||'').toLowerCase().includes(search))); }
+    if(sort==='active') filtered.sort((a,b)=>(b.totalQuizzes||0)-(a.totalQuizzes||0));
+    else if(sort==='newest') filtered.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    else if(sort==='oldest') filtered.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    else if(sort==='alpha') filtered.sort((a,b)=>(a.displayName||'').localeCompare(b.displayName||''));
+    if(DOM.usersTotalCount) DOM.usersTotalCount.textContent=`${filtered.length} users`;
+    DOM.usersList.innerHTML='';
+    if(filtered.length===0){ DOM.usersList.innerHTML='<div class="mono" style="padding:20px; text-align:center; color:var(--text-muted);">No users found</div>'; return; }
+    filtered.forEach(user=>{
+        if(!user || !user.gmail) return;
+        const div=document.createElement('div');
+        div.className='admin-row';
+        div.innerHTML=`<img class="admin-avatar" src="${user.avatar||''}" alt=""><div class="admin-row-info"><div class="admin-row-name">${user.displayName||'Unknown'}</div><div class="admin-row-gmail">${user.gmail} • ${user.totalQuizzes||0} quizzes</div></div><button class="btn-admin-blue" data-gmail="${user.gmail}" style="font-size:10px;">VIEW</button>`;
+        div.querySelector('button')?.addEventListener('click',()=>{ openUserDetailModal(user.gmail); });
+        DOM.usersList.appendChild(div);
+    });
+}
+function openUserDetailModal(gmail){
+    const user=allUsers.find(u=>u && u.gmail===gmail);
+    if(!user) return;
+    const modal=document.getElementById('users-action-modal');
+    const content=document.getElementById('users-action-content');
+    if(!modal||!content) return;
+    content.innerHTML=`<div><div style="font-weight:800;">${user.displayName||'Unknown'}</div><div class="mono" style="font-size:11px;">${user.gmail}</div><div>Total: ${user.totalQuizzes||0}</div></div>`;
+    modal.classList.remove('hidden');
+}
+function renderBannedFeatured(){
+    if(DOM.bannedUsersList){
+        const banned=allUsers.filter(u=>u && u.isBanned);
+        DOM.bannedUsersList.innerHTML=banned.length? banned.map(u=>`<div>${u.displayName} (${u.gmail}) <button class="btn-admin-blue unban-btn" data-gmail="${u.gmail}">UNBAN</button></div>`).join('') : '<div class="mono" style="font-size:11px;">No banned users</div>';
+        DOM.bannedUsersList.querySelectorAll('.unban-btn').forEach(btn=>{
+            btn.addEventListener('click', async()=>{
+                const gmail=btn.dataset.gmail;
+                const mod=await import('./firebase.js');
+                await mod.banUser(gmail,false);
+            });
+        });
+    }
+    if(DOM.featuredUsersList){
+        const featured=allUsers.filter(u=>u && u.isFeatured);
+        DOM.featuredUsersList.innerHTML=featured.length? featured.map(u=>`<div>⭐ ${u.displayName} <button class="btn-admin-blue unfeature-btn" data-gmail="${u.gmail}">UNFEATURE</button></div>`).join('') : '<div class="mono" style="font-size:11px;">No featured users</div>';
+    }
+}
+function renderHistory(){
+    if(!DOM.historyList) return;
+    DOM.historyList.innerHTML='';
+    if(leaderboardHistory.length===0){
+        DOM.historyList.innerHTML='<div class="mono" style="padding:20px; text-align:center;">No history yet</div>';
+        return;
+    }
+    leaderboardHistory.forEach(snap=>{
+        if(!snap) return;
+        const div=document.createElement('div');
+        div.className='admin-row';
+        div.innerHTML=`<div class="admin-row-info"><div class="admin-row-name">📸 ${new Date(snap.clearedAt).toLocaleString()} • by ${snap.clearedBy||'auto'}</div></div><div><button class="btn-admin-blue view-snap-btn" data-id="${snap.id}">VIEW</button></div>`;
+        div.querySelector('.view-snap-btn')?.addEventListener('click',()=>{ openHistoryDetail(snap); });
+        DOM.historyList.appendChild(div);
+    });
+}
+function openHistoryDetail(snap){
+    const modal=document.getElementById('history-detail-modal');
+    const content=document.getElementById('history-detail-content');
+    if(!modal||!content) return;
+    content.innerHTML=`<h4>📸 Snapshot ${new Date(snap.clearedAt).toLocaleString()}</h4><pre>${JSON.stringify(snap.anonymousStats,null,2)}</pre>`;
+    modal.classList.remove('hidden');
+}
+function updateAutoclearCountdown(settings){
+    if(!settings) return;
+    const el=document.getElementById('autoclear-countdown');
+    const nextEl=document.getElementById('next-clear-time');
+    if(nextEl) nextEl.textContent = settings.nextAutoClearAt ? new Date(settings.nextAutoClearAt).toLocaleString() : 'Never';
+    if(!el) return;
+    if(settings.leaderboardFrozen){ el.textContent='⏸️ Frozen'; return; }
+    if(settings.leaderboardAutoClearDays==='Never'){ el.textContent='♾️ Never'; return; }
+    const diff = (settings.nextAutoClearAt||0) - Date.now();
+    if(diff<=0){ el.textContent='⏰ Due now'; return; }
+    const days=Math.floor(diff/(24*60*60*1000));
+    el.textContent=`Next auto-clear in ${days} days`;
+}
+function canModifyUser(actor, targetUser){
+    if(!actor || !targetUser) return {allowed:false, reason:'Invalid'};
+    const actorGmail = (actor.gmail||'').toLowerCase();
+    const targetGmail = (targetUser.gmail||'').toLowerCase();
+    const ownerGmail = (typeof effectiveOwnerGmail!=='undefined' && effectiveOwnerGmail ? effectiveOwnerGmail : (typeof OWNER_CONFIG!=='undefined'?OWNER_CONFIG.gmail:'')).toLowerCase();
+    if(actorGmail === targetGmail) return {allowed:false, reason:'You cannot modify yourself'};
+    if(targetGmail === ownerGmail) return {allowed:false, reason:'Cannot modify the OWNER'};
+    return {allowed:true};
+}
+function showAdminToast(msg){
+    const toast = document.getElementById('copy-toast');
+    if(toast){
+        toast.textContent = msg;
+        toast.classList.remove('hidden');
+        toast.classList.add('show');
+        setTimeout(()=>{ toast.classList.remove('show'); toast.classList.add('hidden'); }, 2500);
+    } else {
+        alert(msg);
+    }
+}
+async function openEditAdminModal(gmail){
+    const admin=allAdmins.find(a=>a && a.gmail && a.gmail.toLowerCase()===gmail.toLowerCase());
+    if(!admin){ alert('Admin not found'); return; }
+    editingAdminGmail=gmail;
+    const content=DOM.editAdminContent;
+    if(!content) return;
+    content.innerHTML='';
+    const nameRow=document.createElement('div');
+    nameRow.innerHTML=`<label class="mono" style="font-size:11px;">Display Name</label><input id="edit-admin-displayname" class="admin-input-sm" value="${admin.displayName||''}">`;
+    content.appendChild(nameRow);
+    const passRow=document.createElement('div');
+    const isHashed = /^[a-f0-9]{64}$/i.test(admin.password||'');
+    const canReset = typeof canResetPassword!=='undefined' ? canResetPassword(currentAdmin, admin) : false;
+    if(isHashed){
+        passRow.innerHTML=`<label class="mono" style="font-size:11px;">Password Status 🛡️ hashed</label><div style="background:rgba(0,255,153,0.08); border:1px solid rgba(0,255,153,0.25); border-radius:10px; padding:10px; margin-top:8px;"><div>🛡️ Password hashed (SHA-256)</div></div>${canReset?'<button type="button" class="btn-admin-red" id="modal-reset-pwd-btn" style="margin-top:10px;">🔄 Reset Password</button>':''}`;
+    } else {
+        passRow.innerHTML=`<label class="mono" style="font-size:11px;">Password Status ⚠️ legacy</label><div style="background:rgba(255,138,0,0.08); border:1px solid rgba(255,138,0,0.25); border-radius:10px; padding:10px; margin-top:8px;"><div>⚠️ Plaintext (will be hashed)</div></div>${canReset?'<button type="button" class="btn-admin-red" id="modal-reset-pwd-btn" style="margin-top:10px;">🔄 Reset Password</button>':''}`;
+    }
+    content.appendChild(passRow);
+    const modalResetBtn=content.querySelector('#modal-reset-pwd-btn');
+    if(modalResetBtn){
+        modalResetBtn.addEventListener('click',()=>{
+            DOM.editAdminModal.classList.add('hidden');
+            if(typeof openResetPasswordConfirm!=='undefined') openResetPasswordConfirm(admin.gmail);
+        });
+    }
+    const roleRow=document.createElement('div');
+    roleRow.style.marginTop='12px';
+    roleRow.innerHTML=`<label class="mono" style="font-size:11px;">Role</label><select id="edit-admin-role" class="admin-input-sm"><option value="admin" ${admin.role==='admin'?'selected':''}>ADMIN</option><option value="administrator" ${admin.role==='administrator'?'selected':''}>ADMINISTRATOR</option></select>`;
+    content.appendChild(roleRow);
+    DOM.editAdminTitle.textContent=`Edit — ${admin.displayName||'Unknown'}`;
+    DOM.editAdminModal.classList.remove('hidden');
+}
+async function handleEditAdminSave(){
+    if(!editingAdminGmail) return;
+    const admin=allAdmins.find(a=>a && a.gmail && a.gmail.toLowerCase()===editingAdminGmail.toLowerCase());
+    if(!admin) return;
+    const newDisplayName=document.getElementById('edit-admin-displayname')?.value.trim()||admin.displayName;
+    const newRoleSelect=document.getElementById('edit-admin-role');
+    const newRole=newRoleSelect ? newRoleSelect.value : admin.role;
+    try{
+        DOM.editAdminSave.disabled=true; DOM.editAdminSave.textContent='SAVING...';
+        const updates={displayName:newDisplayName, role:newRole};
+        await updateAdmin(editingAdminGmail, updates);
+        DOM.editAdminModal.classList.add('hidden'); editingAdminGmail=null;
+    }catch(e){ alert(e.message); }
+    finally{ DOM.editAdminSave.disabled=false; DOM.editAdminSave.textContent='SAVE CHANGES'; }
+}
+async function markAllPingsAsRead(){
+    if(!currentAdmin) return;
+    const chatTabContent=document.getElementById('tab-chat');
+    const isChatVisible=chatTabContent && chatTabContent.classList.contains('active');
+    if(!isChatVisible){
+        console.log('[DevDNA v1.0] Not clearing pings - Chat tab not visible');
+        return;
+    }
+    try{
+        console.log('[DevDNA v1.0] Marking all pings as read for', currentAdmin.gmail);
+        const mod=await import('./firebase.js');
+        await mod.clearAllUnreadPings(currentAdmin.gmail);
+        const badge=DOM.chatUnreadBadge;
+        if(badge){
+            badge.textContent='0';
+            badge.classList.add('hidden');
+            badge.classList.remove('ping-pulse');
+        }
+        document.title=originalDocTitle;
+        unreadPings=[];
+        console.log('[DevDNA v1.0] All pings cleared, badge reset');
+    }catch(e){ console.warn('[DevDNA v1.0] Failed to clear pings', e); }
+}
