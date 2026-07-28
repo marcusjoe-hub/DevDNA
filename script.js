@@ -840,18 +840,12 @@ function hideAllSections(){ [DOM.landing,DOM.quiz,DOM.result,DOM.locked,DOM.admi
 
 function shouldShowBanner(){
     const hash=location.hash;
-    // Hidden on utility pages
     const hiddenHashes=['#secret-admin-only','#uptime-ping','#404','#owner-setup'];
     if(hiddenHashes.includes(hash)) return false;
-    // Hidden on any invalid hash that leads to 404
-    const validHashes=['',' #',' #landing','#quiz','#result','#profile','#leaderboard',' #leaderboard'.trim()];
-    // Actually check if current visible section is utility
     if(DOM.admin && DOM.admin.classList.contains('active')) return false;
     if(DOM.uptime && DOM.uptime.classList.contains('active')) return false;
     if(DOM.notfound && DOM.notfound.classList.contains('active')) return false;
     if(DOM.ownerSetup && DOM.ownerSetup.classList.contains('active')) return false;
-    if(/* securityAudit removed */ && /* securityAudit removed */.classList.contains('active')) return false;
-    // Only show on main pages
     return true;
 }
 
