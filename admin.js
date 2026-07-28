@@ -1,6 +1,6 @@
 /**
  * DevDNA v1.0 - Admin Panel
- * Google Auth + Roles (Owner > Admin > Admin) + 19 Perms + Fake Owner + Users + Leaderboard Ctrl + History + Chat
+ * Google Auth + Roles (Owner > Admin > Admin) + 20 Perms + Fake Owner + Users + Leaderboard Ctrl + History + Chat
  * Owner: Marcus (OWNER_GMAIL_PLACEHOLDER)
  */
 
@@ -1902,14 +1902,121 @@ function renderUsers(){
     });
 }
 function openUserDetailModal(gmail){
-    const user=allUsers.find(u=>u && u.gmail===gmail);
-    if(!user) return;
+    const user=allUsers.find(u=>u && u.gmail && u.gmail===gmail);
+    if(!user){ alert('User not found'); return; }
     const modal=document.getElementById('users-action-modal');
     const content=document.getElementById('users-action-content');
     if(!modal||!content) return;
-    content.innerHTML=`<div><div style="font-weight:800;">${user.displayName||'Unknown'}</div><div class="mono" style="font-size:11px;">${user.gmail}</div><div>Total: ${user.totalQuizzes||0}</div></div>`;
+
+    const memberSince = user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'}) : 'Unknown';
+    const daysActive = user.firstPlayed ? Math.max(1, Math.floor((Date.now() - user.firstPlayed)/(24*60*60*1000))) : 0;
+    const firstPlayed = user.firstPlayed ? new Date(user.firstPlayed).toLocaleDateString() : 'Never';
+    const lastPlayed = user.lastPlayed ? new Date(user.lastPlayed).toLocaleString() : 'Never';
+    const check = currentAdmin ? canModifyUser(currentAdmin, user) : {allowed:false, reason:'Not authenticated'};
+    const isOwnerUser = isOwnerGmail(user.gmail);
+    const targetAdmin = allAdmins.find(a=>a && a.gmail && a.gmail.toLowerCase()===user.gmail.toLowerCase());
+    const isTargetAdmin = !!targetAdmin;
+
+    content.innerHTML=`
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom:16px;">
+            <img src="${user.avatar||`https://ui-avatars.com/api/?name=${encodeURIComponent(safeString(user.displayName))}&background=a855f7&color=fff`}" style="width:72px; height:72px; border-radius:50%; border:2px solid var(--neon-purple); object-fit:cover;">
+            <div>
+                <div style="font-family:var(--font-display); font-size:20px; font-weight:800;">${safeString(user.displayName)} ${user.isBanned?'<span style="color:#ff4d4d;">🚫 BANNED</span>':''} ${user.isFeatured?'<span style="color:var(--neon-green);">⭐ FEATURED</span>':''}</div>
+                <div class="mono" style="font-size:11px; color:var(--text-muted);">${safeString(user.gmail)} • Member Since ${memberSince} ${isOwnerUser?'<span style="color:#ffd700;">(OWNER)</span>':''} ${isTargetAdmin?`<span style="color:var(--neon-purple);">(${safeString(targetAdmin.role).toUpperCase()})</span>`:''}</div>
+                ${!check.allowed ? `<div class="mono" style="font-size:10px; color:var(--text-muted); margin-top:4px;">${safeString(check.reason)}</div>` : ''}
+            </div>
+        </div>
+
+        <div class="overview-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:16px;">
+            <div class="overview-card glass-panel" style="padding:12px; text-align:center;"><div class="overview-label">Total Quizzes</div><div class="overview-num" style="font-size:22px; color:var(--neon-green);">${user.totalQuizzes||0}</div></div>
+            <div class="overview-card glass-panel" style="padding:12px; text-align:center;"><div class="overview-label">Most Frequent</div><div class="overview-num" style="font-size:14px;">${safeString(user.mostFrequentArchetype)||'—'}</div></div>
+            <div class="overview-card glass-panel" style="padding:12px; text-align:center;"><div class="overview-label">Days Active</div><div class="overview-num" style="font-size:18px;">${daysActive}</div></div>
+            <div class="overview-card glass-panel" style="padding:12px; text-align:center;"><div class="overview-label">Last Played</div><div class="overview-num" style="font-size:10px;">${lastPlayed}</div></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; font-size:11px;" class="mono">
+            <div>First Played: ${firstPlayed}</div>
+            <div>Last Played: ${lastPlayed}</div>
+            <div>Created: ${memberSince}</div>
+            <div>Days Active: ${daysActive}</div>
+        </div>
+
+        <div style="margin-top:16px;">
+            <div class="mono" style="font-size:10px; letter-spacing:0.12em; color:var(--text-muted); margin-bottom:8px;">FULL ARCHETYPE BREAKDOWN (10)</div>
+            <div id="user-detail-breakdown">
+                ${Object.entries(user.archetypeCounts||{}).map(([k,v])=>{
+                    const total = Object.values(user.archetypeCounts||{}).reduce((s,x)=>s+x,0) || 1;
+                    const pct = Math.round((v/total)*100);
+                    const color = ({frontend:'#00ccff',backend:'#00ff99',fullstack:'#a855f7',debugging:'#ff8a00',ai:'#00ffff',security:'#ff3333',cloud:'#33ccff',game:'#ffaa00',mobile:'#00ffcc',data:'#c77dff'}[k]||'#fff');
+                    return `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;"><span style="font-size:12px; color:${color};">${k}</span><span class="mono" style="font-size:11px;">${pct}% (${v})</span></div><div style="height:6px; background:rgba(255,255,255,0.06); border-radius:999px; margin-bottom:10px; overflow:hidden;"><div style="width:${pct}%; height:100%; background:${color}; box-shadow:0 0 8px ${color};"></div></div>`;
+                }).join('')}
+            </div>
+        </div>
+
+        <div style="margin-top:16px; display:flex; gap:8px; flex-wrap:wrap;">
+            ${!isOwnerUser && check.allowed && userCan('ban_users') ? (user.isBanned ? `<button class="btn-admin-green" id="detail-unban-btn" style="font-size:11px;">UNBAN USER</button>` : `<button class="btn-admin-red" id="detail-ban-btn" style="font-size:11px;">BAN USER</button>`) : ''}
+            ${!isOwnerUser && check.allowed && userCan('manage_leaderboard') ? (user.isFeatured ? `<button class="btn-admin-blue" id="detail-unfeature-btn" style="font-size:11px;">UNFEATURE USER</button>` : `<button class="btn-admin-green" id="detail-feature-btn" style="font-size:11px;">FEATURE USER</button>`) : ''}
+            ${!isOwnerUser && check.allowed && userCan('delete_users') ? `<button class="btn-admin-red" id="detail-delete-btn" style="font-size:11px;">DELETE USER</button>` : ''}
+            ${!check.allowed ? `<span class="mono" style="font-size:10px; color:var(--text-muted);">${safeString(check.reason)}</span>` : ''}
+        </div>
+
+        <div style="margin-top:12px; max-height:150px; overflow-y:auto;">
+            <div class="mono" style="font-size:10px; color:var(--text-muted); margin-bottom:6px;">RECENT HISTORY (last 10)</div>
+            ${(user.archetypeHistory||[]).slice(0,10).map(h=>`<div class="mono" style="font-size:11px; padding:6px; border-bottom:1px solid var(--border-glass); display:flex; justify-content:space-between;"><span>${safeString(h.archetype)}</span><span style="color:var(--text-muted);">${h.timestamp?new Date(h.timestamp).toLocaleString():''}</span></div>`).join('')||'<div class="mono" style="font-size:11px; color:var(--text-muted);">No history</div>'}
+        </div>
+    `;
+
+    // Bind action buttons
+    content.querySelector('#detail-ban-btn')?.addEventListener('click', async ()=>{
+        if(!confirm(`Ban ${user.gmail}? Hides from leaderboards.`)) return;
+        try{
+            const mod=await import('./firebase.js');
+            await mod.banUser(user.gmail, true);
+            await logActivity('banned user', user.gmail);
+            modal.classList.add('hidden');
+        }catch(e){ alert(e.message); }
+    });
+    content.querySelector('#detail-unban-btn')?.addEventListener('click', async ()=>{
+        try{
+            const mod=await import('./firebase.js');
+            await mod.banUser(user.gmail, false);
+            await logActivity('unbanned user', user.gmail);
+            modal.classList.add('hidden');
+        }catch(e){ alert(e.message); }
+    });
+    content.querySelector('#detail-feature-btn')?.addEventListener('click', async ()=>{
+        try{
+            const mod=await import('./firebase.js');
+            await mod.featureUser(user.gmail, true);
+            await logActivity('featured user', user.gmail);
+            modal.classList.add('hidden');
+        }catch(e){ alert(e.message); }
+    });
+    content.querySelector('#detail-unfeature-btn')?.addEventListener('click', async ()=>{
+        try{
+            const mod=await import('./firebase.js');
+            await mod.featureUser(user.gmail, false);
+            await logActivity('unfeatured user', user.gmail);
+            modal.classList.add('hidden');
+        }catch(e){ alert(e.message); }
+    });
+    content.querySelector('#detail-delete-btn')?.addEventListener('click', async ()=>{
+        if(!confirm(`Delete user ${user.gmail}? Cannot be undone.`)) return;
+        try{
+            const mod=await import('./firebase.js');
+            await mod.deleteUser(user.gmail);
+            await logActivity('deleted user', user.gmail);
+            modal.classList.add('hidden');
+        }catch(e){ alert(e.message); }
+    });
+
     modal.classList.remove('hidden');
 }
+
+function renderUserDetailModal(gmail){
+    openUserDetailModal(gmail);
+}
+
 function renderBannedFeatured(){
     if(DOM.bannedUsersList){
         const banned=allUsers.filter(u=>u && u.isBanned);
@@ -1987,33 +2094,134 @@ async function openEditAdminModal(gmail){
     const admin=allAdmins.find(a=>a && a.gmail && a.gmail.toLowerCase()===gmail.toLowerCase());
     if(!admin){ alert('Admin not found'); return; }
     editingAdminGmail=gmail;
+    const isOwnerTarget=admin.role==='owner' && !admin.displayAsOwner;
+    const isCurrentOwner=currentAdmin?.role==='owner';
+    if(!canModifyAdmin(currentAdmin, admin) && !isOwnerTarget){
+        if(!isCurrentOwner && admin.gmail.toLowerCase()!==currentAdmin.gmail.toLowerCase()){
+            if(!canModifyAdmin(currentAdmin, admin)){
+                alert('Cannot modify equal/higher rank or self');
+                return;
+            }
+        }
+    }
     const content=DOM.editAdminContent;
     if(!content) return;
     content.innerHTML='';
+    // Display Name
     const nameRow=document.createElement('div');
-    nameRow.innerHTML=`<label class="mono" style="font-size:11px;">Display Name</label><input id="edit-admin-displayname" class="admin-input-sm" value="${admin.displayName||''}">`;
+    nameRow.innerHTML=`<label class="mono" style="font-size:11px;">Display Name</label><input id="edit-admin-displayname" class="admin-input-sm" value="${safeString(admin.displayName)}">`;
     content.appendChild(nameRow);
+    // Password Status (hashed indicator + Reset button) - SECURITY OVERHAUL: never show raw
     const passRow=document.createElement('div');
     const isHashed = /^[a-f0-9]{64}$/i.test(admin.password||'');
-    const canReset = typeof canResetPassword!=='undefined' ? canResetPassword(currentAdmin, admin) : false;
+    const canReset = canResetPassword(currentAdmin, admin);
+    const isOwnerViewer = currentAdmin.role==='owner';
     if(isHashed){
-        passRow.innerHTML=`<label class="mono" style="font-size:11px;">Password Status 🛡️ hashed</label><div style="background:rgba(0,255,153,0.08); border:1px solid rgba(0,255,153,0.25); border-radius:10px; padding:10px; margin-top:8px;"><div>🛡️ Password hashed (SHA-256)</div></div>${canReset?'<button type="button" class="btn-admin-red" id="modal-reset-pwd-btn" style="margin-top:10px;">🔄 Reset Password</button>':''}`;
+        passRow.innerHTML=`
+            <label class="mono" style="font-size:11px;">Password Status <span style="margin-left:8px;">🛡️ hashed</span></label>
+            <div style="background:rgba(0,255,153,0.08); border:1px solid rgba(0,255,153,0.25); border-radius:10px; padding:10px 12px; margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:16px;">🛡️</span>
+                    <div>
+                        <div class="mono" style="font-size:11px; font-weight:700; color:var(--neon-green);">Password hashed (SHA-256)</div>
+                        <div class="mono" style="font-size:10px; color:var(--text-muted);">64-char hex • Secure</div>
+                    </div>
+                </div>
+                ${isOwnerViewer ? `<button type="button" class="btn-admin-blue" id="copy-hash-btn" style="padding:4px 8px; font-size:10px;">Copy Hash</button>` : ''}
+            </div>
+            ${canReset ? `<button type="button" class="btn-admin-red" id="modal-reset-pwd-btn" style="margin-top:10px; font-size:11px; padding:8px 12px;">🔄 Reset Password</button>` : '<div class="mono" style="font-size:10px; color:var(--text-muted); margin-top:8px;">🔒 No reset permission (rank protection)</div>'}
+        `;
     } else {
-        passRow.innerHTML=`<label class="mono" style="font-size:11px;">Password Status ⚠️ legacy</label><div style="background:rgba(255,138,0,0.08); border:1px solid rgba(255,138,0,0.25); border-radius:10px; padding:10px; margin-top:8px;"><div>⚠️ Plaintext (will be hashed)</div></div>${canReset?'<button type="button" class="btn-admin-red" id="modal-reset-pwd-btn" style="margin-top:10px;">🔄 Reset Password</button>':''}`;
+        passRow.innerHTML=`
+            <label class="mono" style="font-size:11px;">Password Status <span style="margin-left:8px;">⚠️ legacy</span></label>
+            <div style="background:rgba(255,138,0,0.08); border:1px solid rgba(255,138,0,0.25); border-radius:10px; padding:10px 12px; margin-top:8px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:16px;">⚠️</span>
+                    <div>
+                        <div class="mono" style="font-size:11px; font-weight:700; color:var(--neon-orange);">Plaintext (will be hashed on next login)</div>
+                        <div class="mono" style="font-size:10px; color:var(--text-muted);">Auto-migration enabled</div>
+                    </div>
+                </div>
+            </div>
+            ${canReset ? `<button type="button" class="btn-admin-red" id="modal-reset-pwd-btn" style="margin-top:10px; font-size:11px; padding:8px 12px;">🔄 Reset Password</button>` : ''}
+        `;
     }
     content.appendChild(passRow);
+    const copyHashBtn=content.querySelector('#copy-hash-btn');
+    if(copyHashBtn){
+        copyHashBtn.addEventListener('click',()=>{
+            playClick();
+            try{
+                navigator.clipboard.writeText(admin.password).then(()=>{
+                    copyHashBtn.textContent='✓ Copied Hash';
+                    setTimeout(()=>copyHashBtn.textContent='Copy Hash',1500);
+                });
+            }catch{
+                alert('Hash: '+admin.password);
+            }
+        });
+    }
     const modalResetBtn=content.querySelector('#modal-reset-pwd-btn');
     if(modalResetBtn){
         modalResetBtn.addEventListener('click',()=>{
+            playClick();
             DOM.editAdminModal.classList.add('hidden');
-            if(typeof openResetPasswordConfirm!=='undefined') openResetPasswordConfirm(admin.gmail);
+            openResetPasswordConfirm(admin.gmail);
         });
     }
-    const roleRow=document.createElement('div');
-    roleRow.style.marginTop='12px';
-    roleRow.innerHTML=`<label class="mono" style="font-size:11px;">Role</label><select id="edit-admin-role" class="admin-input-sm"><option value="admin" ${admin.role==='admin'?'selected':''}>ADMIN</option><option value="administrator" ${admin.role==='administrator'?'selected':''}>ADMINISTRATOR</option></select>`;
-    content.appendChild(roleRow);
-    DOM.editAdminTitle.textContent=`Edit — ${admin.displayName||'Unknown'}`;
+
+    // Role dropdown (ADMIN / ADMINISTRATOR — ADMINISTRATOR only visible to OWNER)
+    if(isCurrentOwner && !isOwnerTarget){
+        const roleRow=document.createElement('div'); roleRow.style.marginTop='12px';
+        roleRow.innerHTML=`<label class="mono" style="font-size:11px;">Role</label><select id="edit-admin-role" class="admin-input-sm"><option value="admin" ${admin.role==='admin'?'selected':''}>🛡️ ADMIN</option><option value="administrator" ${admin.role==='administrator'?'selected':''}>⚡ ADMINISTRATOR</option></select>`;
+        content.appendChild(roleRow);
+
+        // DISPLAY AS OWNER toggle (visible ONLY to real OWNER)
+        const fakeRow=document.createElement('div');
+        fakeRow.className='admin-toggle-card';
+        fakeRow.style.cssText='margin:14px 0; background: linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.05)); border:1px solid rgba(255,215,0,0.35);';
+        fakeRow.innerHTML=`<div><div style="font-weight:800; font-size:13px;">👑 DISPLAY AS OWNER</div><div class="mono" style="font-size:10px;">Grants visual appearance of Owner (gold badge, FULL ACCESS). Cosmetic only.</div></div><label class="toggle-switch"><input id="edit-admin-display-as-owner" type="checkbox" ${admin.displayAsOwner?'checked':''}><span class="toggle-slider"></span></label>`;
+        content.appendChild(fakeRow);
+
+        // ADMINISTRATOR toggle at top of permissions panel with description
+        const adminToggleRow=document.createElement('div'); adminToggleRow.className='admin-toggle-card'; adminToggleRow.style.cssText='margin:14px 0;';
+        adminToggleRow.innerHTML=`<div><div style="font-weight:800; font-size:13px;">⚡ ADMINISTRATOR</div><div class="mono" style="font-size:10px;">Grants full access to everything. When ON, all 20 permissions are automatically granted and checkboxes disabled.</div></div><label class="toggle-switch"><input id="edit-admin-is-administrator" type="checkbox" ${admin.role==='administrator'?'checked':''}><span class="toggle-slider"></span></label>`;
+        content.appendChild(adminToggleRow);
+    } else if(isOwnerTarget){
+        const locked=document.createElement('div'); locked.className='admin-input-sm'; locked.style.cssText='background:rgba(255,215,0,0.1); border-color:rgba(255,215,0,0.3); color:#ffd700; text-align:center; font-weight:700;'; locked.textContent='👑 OWNER — Cannot be modified (Protected)'; content.appendChild(locked);
+    }
+
+    // ALL 20 permission checkboxes (grouped, disabled when ADMINISTRATOR toggled ON)
+    if(!isOwnerTarget){
+        const permsContainer=document.createElement('div'); permsContainer.id='edit-perms-container'; permsContainer.style.marginTop='14px'; content.appendChild(permsContainer);
+        const isAdminToggleOn=admin.role==='administrator';
+        renderPermissionsCheckboxes(permsContainer, admin.permissions, isAdminToggleOn, isCurrentOwner, admin.role);
+        if(isCurrentOwner){
+            const toggle=content.querySelector('#edit-admin-is-administrator');
+            if(toggle){
+                toggle.addEventListener('change',()=>{
+                    const isOn=toggle.checked;
+                    renderPermissionsCheckboxes(permsContainer, admin.permissions, isOn, isCurrentOwner, isOn?'administrator':'admin');
+                });
+            }
+            const roleSelect=content.querySelector('#edit-admin-role');
+            if(roleSelect){
+                roleSelect.addEventListener('change',()=>{
+                    const isOn=roleSelect.value==='administrator';
+                    const toggleCb=content.querySelector('#edit-admin-is-administrator');
+                    if(toggleCb) toggleCb.checked=isOn;
+                    renderPermissionsCheckboxes(permsContainer, admin.permissions, isOn, isCurrentOwner, roleSelect.value);
+                });
+            }
+        }
+    }
+
+    DOM.editAdminTitle.textContent=`Edit — ${safeString(admin.displayName)} ${getRoleEmoji(admin.role)}`;
+    if(isOwnerTarget){ DOM.editAdminRemove.style.display='none'; }
+    else{
+        if(canModifyAdmin(currentAdmin, admin) || isCurrentOwner){ DOM.editAdminRemove.style.display='inline-flex'; }
+        else DOM.editAdminRemove.style.display='none';
+    }
     DOM.editAdminModal.classList.remove('hidden');
 }
 async function handleEditAdminSave(){
