@@ -280,7 +280,7 @@ async function ensureOwnerExists(){
     }catch(e){}
 
     if(ownerSetupComplete){
-        console.log('[DevDNA v1.0] Owner setup complete - skipping auto-seed from OWNER_CONFIG, owner is', effectiveOwnerGmail||'in Firestore');
+        console.log('[DevDNA v1.0] Owner setup complete');
         // Still ensure at least one owner exists in Firestore, but don't create placeholder
         if(firebaseInitialized && effectiveOwnerGmail){
             try{
