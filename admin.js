@@ -1,6 +1,6 @@
 /**
  * DevDNA v1.0 - Admin Panel
- * Google Auth + Roles (Owner > Admin > Admin) + 20 Perms + Fake Owner + Users + Leaderboard Ctrl + History + Chat
+ * Google Auth + Roles (Owner > Admin > Admin) + 19 Perms + Fake Owner + Users + Leaderboard Ctrl + History + Chat
  * Owner: Marcus (OWNER_GMAIL_PLACEHOLDER)
  */
 
@@ -20,6 +20,11 @@ import {
     isFirebaseConfigured
 } from './firebase.js';
 import { THEMES, applyTheme } from './themes.js';
+
+function safeString(val, fallback) {
+  if (val && typeof val === 'string') return val;
+  return fallback || 'Unknown';
+}
 
 const DOM = {
     adminSection: document.getElementById('admin-section'),
@@ -2261,14 +2266,4 @@ async function markAllPingsAsRead(){
         unreadPings=[];
         console.log('[DevDNA v1.0] All pings cleared, badge reset');
     }catch(e){ console.warn('[DevDNA v1.0] Failed to clear pings', e); }
-}
-
-// Safe string helper - prevents undefined errors
-window.safeString = function(val, fallback) {
-  if (val && typeof val === 'string') return val;
-  return fallback || 'Unknown';
-};
-function safeString(val, fallback) {
-  if (val && typeof val === 'string') return val;
-  return fallback || 'Unknown';
 }
