@@ -2262,3 +2262,13 @@ async function markAllPingsAsRead(){
         console.log('[DevDNA v1.0] All pings cleared, badge reset');
     }catch(e){ console.warn('[DevDNA v1.0] Failed to clear pings', e); }
 }
+
+// Safe string helper - prevents undefined errors
+window.safeString = function(val, fallback) {
+  if (val && typeof val === 'string') return val;
+  return fallback || 'Unknown';
+};
+function safeString(val, fallback) {
+  if (val && typeof val === 'string') return val;
+  return fallback || 'Unknown';
+}
